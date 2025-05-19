@@ -43,6 +43,3 @@ This repository is provided under the MIT License. See `LICENSE` for more inform
 ## Contact
 
 For questions or contributions, please open an issue or submit a pull request.
-
-
-Stage 7: Verify ingestion
