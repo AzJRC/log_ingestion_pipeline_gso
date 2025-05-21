@@ -10,7 +10,7 @@ This repository is a subset of a broader initiative aimed at documenting and sta
 
 ## Log Ingestion Pipeline
 
-![Log Ingestion Pipeline Diagram](https://github.com/user-attachments/assets/0b78f0e3-2b32-4acd-9363-b1e56e63b618)
+![ingestion_pipeline(1)](https://github.com/user-attachments/assets/35f74d0a-c0c1-4e81-a839-142c83702c52)
 
 ### Overview
 
