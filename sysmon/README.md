@@ -76,6 +76,12 @@ CommandLine: "C:\Windows\system32\fltMC.exe" unload SysmonDrv
 
 - If you are having issues uninstalling Sysmon, you can use the command `Sysmon.exe -u force`.
 
+### Sysmon Deployment in Windows Domain
+
+Deploying software in a big environment can be a little bit tricky; however, intelligent use of a Windows DC, GPO settings, and PowerShell script can make this task possible.
+
+If you want to deploy and configure Windows Sysmon following best practices, refer to the documentation file of [Sysmon Deployment](./docs/windows-sysmon-deployment.md) in this repository.
+
 ### Linux sysmon
 
 TODO
@@ -160,10 +166,93 @@ When using any of these parameters, you must include always the `-c` option. Thi
 
 ### XML Configuration file
 
-Configuring Sysmon using the XML file is often the prefered method, especialy with projects like the ones made by `SwiftOnSecurity` on [`sysmon-config`](https://github.com/SwiftOnSecurity/sysmon-config) or by `olafhartong` on [`sysmon-modular`](https://github.com/olafhartong/sysmon-modular), which will made our lives more easier when it comes to create a tailored configuration of our Sysmon instance.
+Configuring Sysmon using the XML file is often the prefered method, especialy with projects like [`sysmon-config`](https://github.com/SwiftOnSecurity/sysmon-config) by `SwiftOnSecurity` or [`sysmon-modular`](https://github.com/olafhartong/sysmon-modular) by `olafhartong`, which makes our lives easier when it comes to create a tailored configuration file of our Sysmon instance.
 
 #### Configuration file overview
 
+The Sysmon configuration file structure is simple, yet tedious. The following code snipped shows the general structure of the XML configuration file:
+
+```XML
+<Sysmon schemaversion="4.90">
+    <!-- Global (optional) options -->
+    
+        <!-- Available hash algorithms for images -->
+    <HashAlgorithms>SHA256,SHA1,SHA2,MD5,IMPHASH</HashAlgorithms>
+
+        <!-- Check loaded drivers, log if their code-signing certificate has been revoked, in case malware stole one to sign a kernel driver -->
+    <CheckRevocation/>
+
+        <!-- Monitor for any access process operation, even without tailored configuration within the <EventFiltering> tag -->
+    <ProcessAccessConfig/>
+
+        <!-- Monitor for any loaded image, even without tailored configuration within the <EventFiltering> tag -->
+    <ImageLoad/>
+    
+        <!-- Monitor for any pipe operation (PipeCreate, PipeConnect), even without tailored configuration within the <EventFiltering> tag -->
+    <PipeMonitoringConfig/>
+    
+        <!-- Directory where to archive files (for FileDeletion events)  -->
+    <ArchiveDirectory>C:\directory\path\archive\</ArchiveDirectory>
+
+    <!-- Event Filtering Section: Here is where the granular configuration of Sysmon is made. -->
+    <EventFiltering>
+
+        <!--
+        You can use the following tags to define filtering rules:
+            - The `<EventType>` tag matches a specific event. For this tag you must use the actual EventType name, not `EventType`. You can check the EventTypes in the Sysmon schema by running the command `Sysmon -s` under the <events> tag. The value for the EventType is given by the property `rulename` in each event definition. Additionally, within the <EventType> tag you must include the `onmatch` parameter a value of include or exclude.
+            - The `<Field>` tag is similar to the <EventType> tag, except that it targets the fields of a particular EventType. Again, you can review the fields of each event by reading the Sysmon schema. You will use this tag to define the actual filtering rules for each EventType by defining an operator (the matching operation) and a value (target value to match the rule).
+            
+            The following is an example of the definition of the Event ID 1: ProcessCreate from the Sysmon schema.
+
+                <event name="SYSMONEVENT_CREATE_PROCESS" value="1" level="Informational" template="Process Create" rulename="ProcessCreate" ruledefault="include" version="5">
+                    <data name="RuleName" inType="win:UnicodeString" outType="xs:string" />
+                    <data name="UtcTime" inType="win:UnicodeString" outType="xs:string" />
+                    <data name="ProcessGuid" inType="win:GUID" />
+                    <data name="ProcessId" inType="win:UInt32" outType="win:PID" />
+                    <data name="Image" inType="win:UnicodeString" outType="xs:string" />
+                    <data name="FileVersion" inType="win:UnicodeString" outType="xs:string" />
+                    [Remaning output omitted for conciseness]
+                </event>
+            
+            - The <RuleGroup> is a non-mandatory tag, yet very useful to define more complex filtering rules. By default, all <Field> tags within an <EventType> tag will use an AND group relation (Older Sysmon version used to behave diferently), which means that all those defined rules must match to trigger the EventType. We can use a RuleGroup to change that group relation from AND to OR (or explicitly state an AND relation).
+            - Finally, the <Rule> tag allows us to define a compound rule that groups various <Field> tags in a different group relation. Basically, we can use this tag to define AND|OR grouped filtering rules to create more complex filters.
+
+            Below is an example of the syntax used to define filering rules.
+        -->
+
+        <!--Rule Group 1-->
+        <RuleGroup name="<optional-name>" groupRelation="and|or">
+            <EventType onmatch="include|exclude">
+                <Field condition="operator">Value</Field>
+                <Field condition="operator">Value</Field>
+                <Rule name="<optional-name>" groupRelation="and|or">
+                    <Field condition="operator">Value</Field>
+                    <Field condition="operator">Value</Field>
+                </Rule>
+            </EventType>
+        </RuleGroup>
+
+        <!--Rule Group 2-->
+        <RuleGroup name="<optional-name>" groupRelation="and|or">
+            <EventType onmatch="include|exclude">
+                <Field condition="operator">Value</Field>
+                <Field condition="operator">Value</Field>
+                <Rule name="<optional-name>" groupRelation="and|or">
+                    <Field condition="operator">Value</Field>
+                    <Field condition="operator">Value</Field>
+                </Rule>
+            </EventType>
+        </RuleGroup>
+
+        <!-- 
+        Regarding the operators, you can see them all listed in the Sysmon schema too within the <filters> tag, hut here are all of them:
+        
+        is,is not,contains,contains any,is any,contains all,excludes,excludes any,excludes all,begin with,not begin with,end with,not end with,less than,more than,image
+        -->
+
+    </EventFiltering>    
+</Sysmon>
+```
 
 #### Event Types and Schema
 
