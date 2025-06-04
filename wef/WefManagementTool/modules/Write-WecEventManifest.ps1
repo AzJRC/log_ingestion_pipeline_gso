@@ -20,16 +20,14 @@
 
 .EXAMPLE
     Write-WecEventManifest
-
     Launches the interactive manifest builder with automatic mode enabled by default.
 
 .EXAMPLE
     Write-WecEventManifest -Man "C:\Manifests\MyLog.man" -Dll "C:\Windows\System32\MyLog.dll" -Auto $false
-    
     Creates a manifest file named 'MyLog.man' that points to a DLL with the same name in the System32 folder with manual input for symbols and GUIDs.
 
 .NOTES
-    Author: Alejandro Rodriguez
+    Author: AzJRC
     Created: June 03, 2025
     Version: 1.0
     Requires: PowerShell 5.1 or later
@@ -39,7 +37,6 @@
 
 .LINK
     https://github.com/Security-Experts-Community/wef-guidance/blob/main/New-WECManifest.ps1
-
 #>
 function Write-WecEventManifest {
     param(
@@ -48,7 +45,7 @@ function Write-WecEventManifest {
             HelpMessage = "Manifest Document output file.")]
         [Alias("Man")]
         [string]
-        $CustomEventsMAN = "$PSScriptRoot\CustomEventChannels.man",
+        $CustomEventsMAN = "$PSScriptRoot\..\Files\CustomEventChannels.man",
 
         [Parameter(Mandatory = $false,
             Position = 0,
@@ -66,18 +63,18 @@ function Write-WecEventManifest {
         [bool]
         $EnableAutoMode = $true
     )
-   
-    $UtilsPath = "$PSScriptRoot\Write-WecEventManifest_utils.ps1"
-    if (-Not (Test-Path $UtilsPath)) {
-        throw "Required utility script not found: $UtilsPath"
+
+    # Create Files folder automatically if does not exists
+    if (-not (Test-Path $CustomEventsMAN)) {
+        $FilesFolder = (Split-Path $CustomEventsMAN -Parent)
+        New-Item -ItemType "Directory" -Path $FilesFolder -Force > $null
     }
-    . $UtilsPath
 
     # Create-Manifest writes the initial schema of the Manifest File.
     # It's the starting point of any Event Manifest Document.
     $XmlWriter = Write-ManifestTemplate -OutputPath $CustomEventsMAN
     
-    Write-Host "WEC Manifest Creator Tool started"
+    Write-Host "WEC Manifest Creator Tool started" -ForegroundColor Cyan
     
     # Loop for Provider configuration. 
     # A WEC Manifest can have various providers configured.
@@ -85,10 +82,10 @@ function Write-WecEventManifest {
         $ProviderName = Read-Host "Event Provider Name"
 
         if ($EnableAutoMode) {
-            $ProviderGuid = New-Guid
+            $ProviderGuid = '{' + (New-Guid).Guid + '}'
 
             $ProviderPrefix = Read-Host "Provider Symbol Prefix"
-            $ProviderSymbol = Convert-ToSymbol $ProviderName $ProviderPrefix
+            $ProviderSymbol = ConvertTo-SymbolChannelName $ProviderName $ProviderPrefix
 
             if ($ProviderSymbol.Length -gt 60) {
                 $ProviderSymbol = Read-Host "The Provider Symbol $ProviderSymbol is too long - Modify"
@@ -106,17 +103,18 @@ function Write-WecEventManifest {
         }
 
         Write-ManifestProvider -xmlWriter $XmlWriter -ProviderData $ProviderData -CustomEventsDLL $CustomEventsDLL
-        Write-Host "Provider has been successfully added to the Manifest Document"
+        Write-Host "Provider has been successfully added to the Manifest Document" -ForegroundColor Cyan
         
         # Loop for Channel configuration.
         # An Event Provider can have various (maximum 21) channels configured.
         while ($true) {
-
+            
             if ($EnableAutoMode) {
-                $ChannelName = $ProviderName + '/' + $(Read-Host "Event Channel log stream")
+                $ChannelStream = Read-Host "Event Channel log stream"
+                $ChannelName = $ProviderName + '/' + $ChannelStream
                 
                 $ChannelPrefix = $ProviderPrefix
-                $ChannelSymbol = Convert-ToSymbol $ChannelName $ChannelPrefix
+                $ChannelSymbol = ConvertTo-SymbolChannelName $ChannelName $ChannelPrefix
                 
                 if ($ChannelSymbol.Length -gt 60) {
                     $ChannelSymbol = Read-Host "The Channel Symbol $ChannelSymbol is too long - Modify"
@@ -133,7 +131,7 @@ function Write-WecEventManifest {
             }
 
             Write-ManifestChannel -xmlwriter $XmlWriter -ChannelData $ChannelData
-            Write-Host "Channel has been successfully added to the Provider $($ProviderData.ProviderName)"
+            Write-Host "Channel has been successfully added to the Provider $($ProviderData.ProviderName)" -ForegroundColor Cyan
 
             $EndChannelLoop = Read-Host "Create a new channel? [Y/n]"
             if ($EndChannelLoop -eq 'n') { break }
@@ -141,20 +139,20 @@ function Write-WecEventManifest {
 
         Write-ManifestProviderEnd -xmlWriter $XmlWriter
         
-        Write-Host "Provider $($ProviderData.ProviderName) has been successfully closed"
+        Write-Host "Provider $($ProviderData.ProviderName) has been successfully closed" -ForegroundColor Cyan
         $EndProviderLoop = Read-Host "Create a new provider? [Y/n]"
         if ($EndProviderLoop -eq 'n') { break }
     }
 
     Write-ManifestEnd -xmlWriter $XmlWriter
-    Write-Host "Event Manifest has been written successfully"
+    Write-Host "Event Manifest has been written successfully" -ForegroundColor Cyan
 }
 
 # 
 # Utility functions
 #
 
-function Convert-ToSymbol($inputName, $prefix = "") {
+function ConvertTo-SymbolChannelName($inputName, $prefix = "") {
     $symbol = $inputName.ToUpper() -replace '[^A-Z0-9]', '_'
     if ($prefix -ne "") {
         return "${prefix}_$symbol"
