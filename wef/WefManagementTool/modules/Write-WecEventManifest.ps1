@@ -35,6 +35,12 @@
 .NOTES
     Manifest XML writer logic adapted from the project `wef-guidance` made by `t0x01` and `Anton Kutepov`. See RELATED LINKS.
 
+.NOTES
+    Tasks todo:
+        1. Include EnablePreview flag. Enabling the preview flag will show the user the provider configuration before commiting.
+        2. Include template functionality. This will allow the user use a starting template of channels for all providers.
+    Remember to create Edit-WecEventManifest.ps1 - Module to edit an already created Manifest via CLI commands.
+
 .LINK
     https://github.com/Security-Experts-Community/wef-guidance/blob/main/New-WECManifest.ps1
 #>
@@ -76,10 +82,21 @@ function Write-WecEventManifest {
     
     Write-Host "WEC Manifest Creator Tool started" -ForegroundColor Cyan
     
+    # Store in memory important values
+    $ChannelList = @()
+    $ProviderList = @()
+
     # Loop for Provider configuration. 
     # A WEC Manifest can have various providers configured.
     while ($true) {
-        $ProviderName = Read-Host "Event Provider Name"
+        # User input of the Event Provider
+        do {
+            $ProviderName = Read-Host "Enter a new Event Provider Name"
+            if ($ProviderName -in $ProviderList) {
+                Write-Warning "The provider name '$ProviderName' is already in use."
+            }
+        } while ($ProviderName -in $ProviderList)
+        $ProviderList += $ProviderName
 
         if ($EnableAutoMode) {
             $ProviderGuid = '{' + (New-Guid).Guid + '}'
@@ -107,15 +124,30 @@ function Write-WecEventManifest {
         
         # Loop for Channel configuration.
         # An Event Provider can have various (maximum 21) channels configured.
+        
+        $ChannelCount = 0
         while ($true) {
+
+            if ($ChannelCount -eq 6) {
+                Write-Warning "This is your 7th channel in the provider $ProviderName"
+                Write-Warning "For performance reasons, it is recommended to keep no more than 7 channels per provider."
+            }
             
             if ($EnableAutoMode) {
-                $ChannelStream = Read-Host "Event Channel log stream"
-                $ChannelName = $ProviderName + '/' + $ChannelStream
+                # Semi-automatically generate channel name
+                do {
+                    $ChannelStream = Read-Host "Enter a new Event Channel Stream"
+                    $ChannelName = $ProviderName + '/' + $ChannelStream
+                    if ($ChannelName -in $ChannelList) {
+                        Write-Warning "The channel name '$ChannelStream' is already in the list."
+                    }
+                } while ($ChannelName -in $ChannelList)
+                $ChannelList += $ChannelName
+                $ChannelCount += 1
                 
+                # Automatically generate channel symbol
                 $ChannelPrefix = $ProviderPrefix
                 $ChannelSymbol = ConvertTo-SymbolChannelName $ChannelName $ChannelPrefix
-                
                 if ($ChannelSymbol.Length -gt 60) {
                     $ChannelSymbol = Read-Host "The Channel Symbol $ChannelSymbol is too long - Modify"
                 }
@@ -131,8 +163,8 @@ function Write-WecEventManifest {
             }
 
             Write-ManifestChannel -xmlwriter $XmlWriter -ChannelData $ChannelData
-            Write-Host "Channel has been successfully added to the Provider $($ProviderData.ProviderName)" -ForegroundColor Cyan
 
+            Write-Host "Channel has been successfully added to the Provider $($ProviderData.ProviderName)" -ForegroundColor Cyan
             $EndChannelLoop = Read-Host "Create a new channel? [Y/n]"
             if ($EndChannelLoop -eq 'n') { break }
         }
@@ -146,18 +178,9 @@ function Write-WecEventManifest {
 
     Write-ManifestEnd -xmlWriter $XmlWriter
     Write-Host "Event Manifest has been written successfully" -ForegroundColor Cyan
-}
 
-# 
-# Utility functions
-#
-
-function ConvertTo-SymbolChannelName($inputName, $prefix = "") {
-    $symbol = $inputName.ToUpper() -replace '[^A-Z0-9]', '_'
-    if ($prefix -ne "") {
-        return "${prefix}_$symbol"
-    }
-    return $symbol
+    New-Item -Path (Split-Path $CustomEventsMAN -Parent) -Name "Channels.txt" -ItemType File -Force > $null
+    $ChannelList | Out-File -FilePath "$(Split-Path $CustomEventsMAN -Parent)\Channels.txt" -Encoding UTF8
 }
 
 function Write-ManifestTemplate {
@@ -239,4 +262,16 @@ function Write-ManifestEnd {
     $xmlWriter.Finalize
     $xmlWriter.Flush()
     $xmlWriter.Close()
+}
+
+# 
+# Utility functions
+#
+
+function ConvertTo-SymbolChannelName($inputName, $prefix = "") {
+    $symbol = $inputName.ToUpper() -replace '[^A-Z0-9]', '_'
+    if ($prefix -ne "") {
+        return "${prefix}_$symbol"
+    }
+    return $symbol
 }

@@ -94,7 +94,7 @@ function Install-WecEventManifestDll {
         Set-WefSubscriptionState -State $true -Subscription $Subscription
     }
 
-    Write-Host "Manifest deployment complete." -ForegroundColor Green
+    Write-Host "Manifest deployment complete." -ForegroundColor Cyan
 }
 
 
