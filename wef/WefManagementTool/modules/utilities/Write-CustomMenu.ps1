@@ -17,7 +17,6 @@ function Write-CustomMenu {
     $LongestOptionLength = ($MenuOptions | Sort-Object length -desc | Select-Object -first 1).Length
     $SuggestedHLineLength = [int]($LongestOptionLength / 4)
 
-
     #Menu Settings
     $LeftMenuOptionsPadding = 3
     $InnerMenuOptionsPadding = 3

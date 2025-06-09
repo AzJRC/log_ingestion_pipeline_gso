@@ -137,14 +137,17 @@ channelAccess: O:BAG:SYD:(A;;0xf0005;;;SY)(A;;0x5;;;BA)(A;;0x1;;;S-1-5-32-573)(A
 
 If you have this issue, the problem is likely the same as above but the read permissions must be granted to another log file.
 
-Granting read permissions to the Security Log was easy via GPO because there was a specific policy setting where to configure it, but for non-trivial logs we need to do the configuration manually in the registry.
+Granting read permissions to the Security Log was easy via GPO because there was a specific policy setting where to configure it (there are also GPO settings for the Application, Setup and System logs), but for non-trivial logs we need to do the configuration manually in the registry.
 
 ```diff
 - Warning: Modifying the registry is dangerous. Make sure to backup your system before touching any registry key if you do not want to break your computer completely.
 ```
 
-You can check [this webpage](https://learn.microsoft.com/en-us/troubleshoot/windows-server/group-policy/set-event-log-security-locally-or-via-group-policy#configure-event-log-security-locally) for more information on how to grant permissions to an event log via the Windows Registry. It is highly possible that the Event Log Reader group or the Network Service do not have read access to a channel specified in the subscription pointed out in the event message. Use `wevtutil.exe` to verify.
+You can check [this webpage](https://learn.microsoft.com/en-us/troubleshoot/windows-server/group-policy/set-event-log-security-locally-or-via-group-policy#configure-event-log-security-locally) for more information on how to grant permissions to an event log via the Windows Registry. It is highly possible that the Event Log Reader group or the Network Service do not have read access to a channel specified in the subscription pointed out in the event message (You can use `wevtutil.exe` to verify).
 
+Based on experience, a subscription will trigger an `EventID 103: The subscription <Subscription Name> is unsubscribed.` in the `Microsoft-Windows-Eventlog-ForwardingPlugin/Operational` log of the WEC client if none of the queries can be executed (because of a client-side issue). The subscription is then moved to a pasive *disabled* state.
+
+If at least one query can be executed, instead of an event id 103, the event will be `EventID 101: The subscription <Subscription Name> is created, but one or more channels in the query could not be read at this time.`. Again, the reason of one queries working and others not is very likely to be permission issues with the `Network Service` accessing some privileged or sensible logs.
 
 ### Everything looks fine but my collector still does not have any client connected to it
 

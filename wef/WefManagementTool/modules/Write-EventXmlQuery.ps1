@@ -1,12 +1,34 @@
+# Define QueryType Element Object
+class QueryTypeElement {
+    [string]$Type  # 'Select' or 'Suppress'
+    [string]$Path
+    [string]$XPath
 
+    QueryTypeElement([string]$Type, [string]$Path, [string]$XPath) {
+        $this.Type = $Type
+        $this.Path = $Path
+        $this.XPath = $XPath
+    }
+}
+
+# Define Query Object
+class QueryObject {
+    [int]$Id
+    [System.Collections.Generic.List[QueryTypeElement]]$QueryElements
+
+    QueryObject([int]$Id) {
+        $this.Id = $Id
+        $this.QueryElements = [System.Collections.Generic.List[QueryTypeElement]]::new()
+    }
+}
+
+# List and store all available log channels
+$AvailableChannels = $(wevtutil.exe el)
+
+# Main Function
 function Write-EventXmlQuery {
     param(
-        [Parameter(Mandatory = $false,
-            Position = 0,
-            HelpMessage = "Path where to save the XML query file.")]
-        [Alias("Path")]
-        [string]
-        $OutputPath = "$PSScriptRoot\..\Files\SubscriptionEventXmlQuery.xml"
+        [string]$OutputPath = "$PSScriptRoot\..\Files\SubscriptionEventXmlQuery.xml"
     )
 
     # Import Utilities
@@ -17,140 +39,239 @@ function Write-EventXmlQuery {
 
     Write-MessageInBox -Msg "Event XML Query Creator Tool" -Color Cyan
 
-    # Start XmlWriter
-    $XmlWriter = New-Object System.XMl.XmlTextWriter($OutputPath, $null)
-        
-    # XML Writer Settings
-    $xmlWriter.Formatting = "Indented"
-    $xmlWriter.Indentation = "4"
+    # Initialize QueryList as an array of QueryObject
+    $QueryList = @()
 
-    # Begin XML Query file with <Querylist> tag
-    $xmlWriter.WriteStartDocument()
-    $xmlWriter.WriteStartElement("QueryList")
-
-    # Helper variables
-    $QueryObjectCount = 0  # Also represents the current Query Object ID
+    $QueryObjectCount = 0
     $QueryItemCount = 0
 
     $ContinueObjectMenuLoop = $true
     while ($ContinueObjectMenuLoop) {
      
-        Write-CustomMenu -MenuTitle "[Query Object Menu]" -MenuOptions @("Add a new query object", "Inspect current query objects [TODO]", "Finish Query") -PreMenuText "Select an option:"
-        
-        try {
-            $Option = [int](ReadFrom-CustomPrompt)
-            # Write-Host "Selected Option: [$Option]" -ForegroundColor DarkGray   # Use to debug 
-        }
-        catch {
-            Write-Host "Invalid input" -ForegroundColor Red
-            continue
-        }
-
-        
+        Write-CustomMenu -MenuTitle "[QueryList Menu]" -MenuOptions @(
+            "Add a new Query Element", 
+            "Inspect Query Elements", 
+            "Finish XML Query List") -PreMenuText "Select an option:"
+        $Option = Get-MenuOption 
 
         switch ($Option) {
             1 {
-                $QueryItemCount += Write-QueryObject $QueryObjectCount $QueryItemCount
+                # Create new QueryObject and add to list
+                $QueryObject = New-Object QueryObject($QueryObjectCount)
+                $QueryItemCount = Write-QueryObject -QueryObject $QueryObject -QueryItemCount $QueryItemCount
+                $QueryList += $QueryObject
                 $QueryObjectCount += 1
-                continue 
             }
             2 { 
-                Write-Host "Option not yet ready [TODO]" -ForegroundColor Red; break 
+                # Inspect current QueryList
+                Inspect-QueryList -QueryList $QueryList
             }
-            3 { $ContinueObjectMenuLoop = $false; break }
-            default { Write-Warning "Invalid option"; break }
+            3 { 
+                # Save to XML and exit
+                Write-XmlQueryFile -QueryList $QueryList -OutputPath $OutputPath
+                $ContinueObjectMenuLoop = $false
+            }
+            default { Write-Warning "Invalid option" }
         }
     }
-    
-    # Finish XML Query file 
-    $xmlWriter.WriteEndElement()
-    $xmlWriter.Finalize
-    $xmlWriter.Flush()
-    $xmlWriter.Close()
 
-    Write-Host "Event XML query file has been succesfully created." -ForegroundColor Cyan
+
 }
 
-<#
-XML Event Query Structure:
-
-<QueryList>
-    <Query Id="$QueryId" Path="$Channel">
-        <Select Path="$Channel">*[System[(EventID=$EventId)]]</Select>
-        <Select Path="$Channel">*[System[(EventID &gt;=$EventId and EventID &lt;=$EventId)]]</Select>
-        <Suppress Path="$Channel">*[EventData[Data[@Name="$EventDataKey"]="$EventDataValue"]]</Suppress>
-    </Query>
-</QueryList>
-
-$QueryId                 An iterable value
-$Channel            The channel where the query will search for events that matches the Select and Supress statements within the Query block.
-                    Usually, the $Channel in the <Query> tag will be the same in the <Select> and <Supress> tags within it.
-$EventId            A number that uniquely identifies the event of interest.
-$EventDataKey       The Key within the <EventData> block in some Windows Events
-$EventDataValue     The value associated with a $EventDataKey within the <EventData> block in some Windows Events.
-
-Notes:
-- We call any Select/Supress tag a query item. 
-- According to user reports, WECs break when you exceed 22 query items in total (i.e., in the whole XMLQuery, not per Query block).
-- Therefore, changing from individual EventIDs to ranges (e.g., 5000-5005) is recommended, as it reduces item query count.
-- This limitation is not formally documented.
-#>  
-
+# Function to handle one QueryObject
 function Write-QueryObject {
     param(
-        [Parameter(Mandatory = $true)][int]$QueryId,
+        [Parameter(Mandatory = $true)][QueryObject]$QueryObject,
         [Parameter(Mandatory = $true)][int]$QueryItemCount
     )
 
-    # Request Channel
-    $Channel = Get-Channel
+    Write-Host "[+] Creating Query Element with Id [$($QueryObject.Id)]" -ForegroundColor Cyan
 
+    $QueryDefaultChannel = ""
+    $ContinueQueryTypeMenuLoop = $true
+    while ($ContinueQueryTypeMenuLoop) {
+        Write-CustomMenu -MenuTitle "[QueryType Menu]" -MenuOptions @(
+            "Add a new Query Element",  
+            "Choose a default channel",
+            "Finish query") -PreMenuText "Select an option:"
+        $Option = Get-MenuOption 
 
-    # Open QueryObject tag
-    $xmlWriter.WriteStartElement("Query")
-    $xmlWriter.WriteAttributeString("Id", $QueryId)
-    $xmlWriter.WriteAttributeString("Path", $Channel)
-
-    while ($true) {
-        Write-Host "Writing new query item" -ForegroundColor Cyan
-
-        $Supress = (Read-Host "Add a supress query item? [y/N]") -match '^[yY]$'
-        Write-QueryItem -Channel $Channel -Supress $Supress
-        $LocalQueryItemCount += 1
-        
-        $NewQuery = Read-Host "Do you want to add another query item (LocalQueryCount: $LocalQueryItemCount)? [Y/n]"
-        if ($NewQuery.ToUpper() -eq 'N') { break }
+        switch ($Option) {
+            1 {
+                $Element = Get-QueryTypeElement -QueryDefaultChannel $QueryDefaultChannel
+                if ($Element) {
+                    $QueryObject.QueryElements.Add($Element)
+                    $QueryItemCount += 1
+                }
+            }
+            2 {
+                $QueryDefaultChannel = Set-QueryDefaultChannel
+            }
+            3 {
+                $ContinueQueryTypeMenuLoop = $false
+            }
+            default {
+                Write-Warning "Invalid option"
+            }
+        }
     }
 
-    # Close QueryObject tag
-    $xmlWriter.WriteEndElement()
-
-    return $LocalQueryItemCount
+    return $QueryItemCount
 }
-function Write-QueryItem {
-    param(
-        [string]$Channel,
-        [bool]$Supress
+
+# Choose default channel
+function Set-QueryDefaultChannel {
+    Write-Host "[+] Set the default channel for this Query object." -ForegroundColor Cyan
+    $Channel = Get-Channel
+    Write-Host "[+] Default channel set to: $Channel" -ForegroundColor Green
+    return $Channel
+}
+
+# Create one QueryTypeElement
+function Get-QueryTypeElement {
+    param (
+        [string]$QueryDefaultChannel = ""
     )
 
-    # Open QueryItem tag
-    if ($Supress) {
-        $xmlWriter.WriteStartElement("Supress")
+    $DefaultChannelText = if (![string]::IsNullOrEmpty($QueryDefaultChannel)) { " [$QueryDefaultChannel]" } else { "" }
+
+    # Obtain QueryType
+    while ($true) {
+        $QueryType = [string](ReadFrom-CustomPrompt -PromptText "Query Type - SELECT(1) SUPRESS(2)" -Prompt ":")
+        if (-not $QueryType.ToUpper() -in @('1', '2', 'SELECT', 'SUPRESS')) {
+            Write-Warning "Invalid option"
+            continue
+        }
+        break
     }
-    else {
-        $xmlWriter.WriteStartElement("Select")
-    } 
-    $xmlWriter.WriteAttributeString("Path", $Channel)
 
-    Write-XPathQuery
+    # Obtain channel
+    while ($true) {
+        Write-Host "Type `"!MENU`" to open the Event Channel Menu. You can also type `"!KW:`{Keyword`}`" to search for matching Event Channels" -ForegroundColor Gray
+        $Channel = [string](ReadFrom-CustomPrompt -PromptText ("Event Channel" + "$DefaultChannelText") -Prompt ":")
+        if ($QueryType.ToUpper() -eq "`$MENU") {
+            $Channel = Get-Channel
+            break
+        }
 
-    # Close QueryItem tag
-    $xmlWriter.WriteEndElement()
+        # [TODO] Implement the Channel Menu with the user input !MENU
+        # ...
+        
+        #Search for event channel by {Keyword} if !KW:{Keyword} is present in the input
+        $Match = $Channel -match '^!KW:{(?<keyword>\w+)}$'
+        if ($Match) {
+            $AvailableChannels | ForEach-Object { 
+                if ($_ -like "*$($Matches.keyword)*" ) {
+                    # [TODO] Paginate output if more than 10 matches are detected
+                    Write-Host " - $_"
+                }
+            }
+            continue
+        }
+
+        #Validate event channel exists in the list provided by the command `wevtutil.exe el`
+        $AvailableChannels | ForEach-Object { 
+            if ($_ -eq $Channel) { 
+                break
+            }
+        }
+        Write-Warning "Unknown channel"
+        $useUnknownChannel = [string](ReadFrom-CustomPrompt -PromptText ("Do you want to use it anyway? [y/N]") -Prompt " ")
+        if ($useUnknownChannel.ToUpper() -ne "Y") {
+            continue
+        }
+        
+        break
+    }
+
+    # Obtain XPath
+    while ($true) {
+        Write-Host "[*] Type `"!TEMPLATES`" to enter the XPath Template Galery. You can search in the galery for common XPath expressions by use-case." -ForegroundColor Gray
+        $XPathQuery = [string](ReadFrom-CustomPrompt -PromptText "XPath Expression" -Prompt ":")
+        
+        # [TODO] Validate XPath
+        # ...
+
+        # Enable EASY-MODE
+        $Match = $XPathQuery -match '^!TEMPLATES$'
+        if ($Match) {
+            $XPathQuery = Get-XPathFromGallery
+            if ($null -eq $XPathQuery) { continue }
+        }
+
+        break
+    }
+
+    # Return new QueryTypeElement
+    return [QueryTypeElement]::new($Type, $Channel, $XPathQuery)
 }
 
-function Write-XPathQuery {
-    $XPathQuery = "*[System[(EventID=1234)]]"
-    $xmlWriter.WriteString($XPathQuery)
+# Write the entire QueryList to XML file
+function Write-XmlQueryFile {
+    param(
+        [Parameter(Mandatory = $true)][QueryObject[]]$QueryList,
+        [Parameter(Mandatory = $true)][string]$OutputPath
+    )
+
+    Write-Host "[+] Writing QueryList to XML file" -ForegroundColor Cyan
+
+    $XmlWriter = New-Object System.XMl.XmlTextWriter($OutputPath, $null)
+    $XmlWriter.Formatting = "Indented"
+    $XmlWriter.Indentation = 4
+
+    $XmlWriter.WriteStartDocument()
+    $XmlWriter.WriteStartElement("QueryList")
+
+    foreach ($Query in $QueryList) {
+        $XmlWriter.WriteStartElement("Query")
+        $XmlWriter.WriteAttributeString("Id", $Query.Id.ToString())
+
+        foreach ($Element in $Query.QueryElements) {
+            $XmlWriter.WriteStartElement($Element.Type)
+            $XmlWriter.WriteAttributeString("Path", $Element.Path)
+            $XmlWriter.WriteString($Element.XPath)
+            $XmlWriter.WriteEndElement()  # Select or Suppress
+        }
+
+        $XmlWriter.WriteEndElement()  # Query
+    }
+
+    $XmlWriter.WriteEndElement()  # QueryList
+    $XmlWriter.WriteEndDocument()
+    $XmlWriter.Flush()
+    $XmlWriter.Close()
+
+    Write-Host "[+] XML successfully written to: $OutputPath" -ForegroundColor Green
+}
+
+# Inspect current QueryList
+function Inspect-QueryList {
+    param(
+        [Parameter(Mandatory = $true)][QueryObject[]]$QueryList
+    )
+
+    Write-Host "-------- Current QueryList --------" -ForegroundColor Cyan
+
+    foreach ($Query in $QueryList) {
+        Write-Host "Query Id: $($Query.Id)" -ForegroundColor Yellow
+        foreach ($Element in $Query.QueryElements) {
+            Write-Host "  [$($Element.Type)] Path='$($Element.Path)' XPath='$($Element.XPath)'" -ForegroundColor Gray
+        }
+    }
+
+    Read-Host "Continue? "
+    Write-Host "----------------------------------" -ForegroundColor Cyan
+}
+
+function Get-MenuOption {
+    try {
+        $Option = [int](ReadFrom-CustomPrompt)
+    }
+    catch {
+        Write-Host "Invalid input" -ForegroundColor Red
+        return $null
+    }
+    return $Option
 }
 
 function Get-Channel {
@@ -185,45 +306,9 @@ function Get-Channel {
 }
 
 function Get-WindowsOsChannels {
-
-    while ($true) {
-        Write-CustomMenu -MenuOptions @(
-            "[Submenu] Network Logs", # Option 1
-            "[Submenu] Remote Management Logs", # Option 2
-            "[Submenu] System Activity", # Option 3
-            "[Submenu] Software and Updates", # Option 4
-            "[Submenu] Tasks and Services", # Option 5
-            "[Submenu] User and Group Management", # Option 6
-            "[Submenu] System Security", # Option 7
-            "[Submenu] Image and External Devices", # Option 8
-            "[Submenu] Powershell", # Option 9
-            "[Submenu] Authentication", # Option 10
-            "[Submenu] Windows Server Roles", # Option 11
-            "[Submenu] Windows Server Active Directory")    # Option 12
-    
-        try {
-            $MenuOption = [int](ReadFrom-CustomPrompt)
-        }
-        catch {
-            Write-Host "Invalid input" -ForegroundColor Red
-            continue
-        }
-
-        switch ($MenuOption) {
-            1 { Write-WindowsNetworkLogMenuOption }
-            2 { Write-WindowsRemoteManagementMenuOption }
-            3 { Write-WindowsSystemActivtityMenuOption }
-            4 { Write-WindowsSoftwareUpdatesMenuOption }
-            5 { Write-WindowsTaskServicesMenuOption }
-            6 { Write-WindowsUserManagementMenuOption }
-            7 { Write-WindowsSystemSecurityMenuOption }
-            8 { Write-WindowsImagesAndDevicesMenuOption }
-            9 { Write-WindowsPowershellMenuOption }
-            10 { Write-WindowsAuthenticationMenuOption }
-            11 { Write-WindowsServerMenuOption }
-            12 { Write-WindowsActiveDirectoryMenuOption }
-            default { break }
-        }
-    }
+    Write-Host "[TODO]" -ForegroundColor red
 }
 
+Get-XPathFromGallery {
+
+}

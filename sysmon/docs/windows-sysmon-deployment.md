@@ -2,7 +2,7 @@
 
 Installing Windows Sysmon in distributed environments (Windows domains) can be somewhat tricky, specially when we care about security risks. In this documentation file you'll find information on how to deploy Widows Sysmon in a secure manner.
 
-Special thanks to `arkoperator` (Carlos Perez) from `TrustedSec LLC.` in his repository project [`SysmonCommunityGuide`](github.com/trustedsec/SysmonCommunityGuide/tree/master) where most of the best practices presented here originate from his work.
+Special thanks to `arkoperator` (Carlos Perez) from `TrustedSec LLC.` in his  project [`SysmonCommunityGuide`](github.com/trustedsec/SysmonCommunityGuide/tree/master) as one of the best resources of information regarding Windows Sysmon.
 
 ## Install Windows Sysmon in a Windows Domain with a StartUp Script
 
@@ -13,13 +13,13 @@ To install Windows Sysmon in a Windows Domain follow the steps outlined next:
     - You can also create a folder and right-click on `properties` to configure the sharing options.
     - For security reasons, make sure that normal users cannot modify or add any file to the remote share.
 
-![Network Share](../media/servermanager_shares_sysmonarchive.png)
+![Network Share](/media/servermanager_shares_sysmonarchive.png)
 
 2. In the shared folder, you will save the Windows Sysmon version you are planning to use, often the [latest release](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon). Ideally, you will also save any other previous version.
     - Save every Sysmon version in a folder with the following suggested naming convention: `SysmonV<VERSION>`. For example, the current versions while I am writing this document is 15.15; thus, the folder name will be `SysmonV15.15`.
     - Within each Sysmon folder store the Sysmon executable for that version. You don't need to keep all three executables (Only the one you need per your environment needs, nor the EULA file).
 
-![Sysmon Archive Folder Structure](../media/sysmonarchive_folder.png)
+![Sysmon Archive Folder Structure](/media/sysmonarchive_folder.png)
 
 3. In the root of the SysmonArchive folder you must save the [following script](./../sysmon-installer.ps1):
 
@@ -105,7 +105,7 @@ if ($Present) {
     - Make sure to configure the script in the PowerShell tab.
     - Make sure you configure the network path and not the local path. A network path begins with two backslashes (`\\`). E.g.: `\\hostname.subdomain.domain.tld\SysmonArchive\sysmon-installer.ps1`
 
-![Configure GPO Startup Script](./../media/startup_script_sysmoninstaller.png)
+![Configure GPO Startup Script](/media/startup_script_sysmoninstaller.png)
 
 6. Finally, you can manually apply the GPO by running the command `gpupdate` or wait around 30 minutes (default time to wait until GPOs are automatically evaluated and applied). Keep in mind that the script will only run on startup, so you'll need to restart the workstations to install Sysmon.
 
@@ -136,6 +136,6 @@ Fortunately, there is a clever and paradogically not-intricate way to push Sysmo
     - Traverse the registry up to this location: `Computer\HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Services\SysmonDrv\Parameters`
     - Click the `Parameters` key and the keys under it, including `Rules`,`Options`,`HashingAlgorithm`,`DnsLookup`,`ConfigHash`,`CheckRevocation`.
 
-![](./../media/sysmon_distributeconfig_registry.png)
+![](/media/sysmon_distributeconfig_registry.png)
 
 3. Finally, you can apply the GPOs manually using the command `gpupdate` or wait until the GPO is applied automatically. Additionally, registry keys are applied automatically on GPO evaluation; thefore, there is no need to restart the workstations.
