@@ -105,6 +105,8 @@ function Read-HostInput {
     return $null
 }
 
+function Write-BlankLine { Write-Host "" }
+
 # Write QueryList XML File - (https://learn.microsoft.com/en-us/windows/win32/wes/queryschema-schema)
 function Write-QueryListXmlFile {
     param(
@@ -155,7 +157,6 @@ function Write-XmlQuery {
 
     # Create $OutputPath if not exists
     if (-not (Test-Path $OutputPath)) {
-        i
         Write-HostMessage -alert -Message "OutputPath does not exist. Creating it..."
         New-Item -Path $OutputPath -Force > $null
     }
@@ -173,15 +174,16 @@ function Write-XmlQuery {
         Write-HostMessage -Message "QueryElementCount: [$QueryElementCount]"
         Write-HostMessage -Message "QueryTypeElementCount: [$QueryTypeElementCount]"
 
-        Write-Host ""   # BlankLine
+        Write-BlankLine
 
         Write-HostMenu -Message "Select an option:"
         Write-HostMenuOption -OptionNumber 1 -Message "Add new QueryElement"
-        Write-HostMenuOption -OptionNumber 2 -Message "Inspect QueryList"
-        Write-HostMenuOption -OptionNumber 3 -Message "Write QueryList XML File"
-        Write-HostMenuOption -OptionNumber 4 -Message "Exit"
+        Write-HostMenuOption -OptionNumber 2 -Message "Import QueryElement"
+        Write-HostMenuOption -OptionNumber 3 -Message "Inspect QueryList"
+        Write-HostMenuOption -OptionNumber 4 -Message "Write QueryList XML File"
+        Write-HostMenuOption -OptionNumber 5 -Message "Exit"
 
-        Write-Host ""   # BlankLine
+        Write-BlankLine
 
         $Option = Read-HostInput -Prompt " > " -Message "Enter option number"
         Switch ($Option) {
@@ -198,18 +200,28 @@ function Write-XmlQuery {
                     foreach ($QueryElement in $NewQueryElement) {
                         $QueryList.AddQueryElement($QueryElement)
                         # [BUG?] I don't know why, but I need to substract one from the list length to get the correct result.
-                        $QueryTypeElementCount += $QueryList.GetLastQueryElement().Length - 1 
+                        $QueryTypeElementCount += $QueryList.GetLastQueryElement().QueryTypeElements.Count
                     }
                 }
                 else {
                     $QueryList.AddQueryElement($NewQueryElement)
                     # [BUG?] I don't know why, but I need to substract one from the list length to get the correct result.
-                    $QueryTypeElementCount += $QueryList.GetLastQueryElement().Length - 1 
+                    $QueryTypeElementCount += $QueryList.GetLastQueryElement().QueryTypeElements.Count
                 }
                 $QueryElementCount += 1
                 Write-HostMessage -success -Message "QueryElement added successfully"
             }
             2 {
+                # [TODO]
+                # Import QueryElement -> <Query> block
+                # Queries can be categorized by the intent of the event:
+                #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
+                # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
+                # Query blocks are also tagged with author name. E.g. 
+
+
+            }
+            3 {
                 # [TODO]
                 # Print query list content with format; not urgent.
                 # Temporal solution...
@@ -220,15 +232,15 @@ function Write-XmlQuery {
                     }
                 }
             }
-            3 {
+            4 {
                 $QueryList.WriteQueryListElement($OutputPath)
                 $XmlFileWritten = $true
             }
-            4 {
+            5 {
                 if (-not $XmlFileWritten) {
                     Write-HostMessage -warning -Message "You haven't write the QueryList XML File"
-                    Read-HostInput -Message "Are you sure you want to exit? [ y / N ]"
-                    if ($ImportQuery.ToUpper() -ne "Y") {
+                    $Exit = Read-HostInput -Message "Are you sure you want to exit? [ y / N ]" -AllowString
+                    if ($Exit.ToUpper() -ne "Y") {
                         break
                     }
                 }
@@ -249,7 +261,6 @@ function Write-NewQueryElement {
 
     # QueryElementLoop
     Write-HostTitle -Message "QueryElement #$QueryElementId"
-    Write-Host ""   # BlankLine
     while ($true) {
         
         if ($LocalQueryTypeCount -gt 0) {
@@ -257,22 +268,24 @@ function Write-NewQueryElement {
             if ($FinishQuery.ToUpper() -eq "Q") {
                 return $QueryElement
             }
-        }
-        Write-Host ""   # BlankLine
+            Write-BlankLine   
 
-        # Optionally, Import query
-        $ImportQuery = Read-HostInput -Message "Do you want to import an existing query? [ Y / n ]" -Prompt ":" -AllowString
-        if ($ImportQuery.ToUpper() -ne "N") {
-            # [TODO] Import Existing Queries from local file database
-            # $ImportedQueries = Import-QueryElements
-
-            return 1
         }
-        Write-Host ""   # BlankLine
+        
+
+        # [TODO] Optionally, Import query
+        # User can import Suppress/Select unique queries like in the option Import Query (block) asked before
+        # The difference is that there is more selectivity of which Suppress/Select queries to include
+        # User can search for queries in the same way as before
+        # $ImportQuery = Read-HostInput -Message "Do you want to import an existing query or queries? [ Y / n ]" -Prompt ":" -AllowString
+        # if ($ImportQuery.ToUpper() -ne "N") {
+        #     [TODO]
+        # }
+        # Write-BlankLine   
 
         # Obtain QueryType
         while ($true) {
-            $QueryType = (Read-HostInput -Message "What Query Type? [ SELECT(1) / SUPRESS(2) ]" -Prompt ":" -AllowString).ToUpper()
+            $QueryType = (Read-HostInput -Message "What Query Type? [ SELECT(1) / SUPPRESS(2) ]" -Prompt ":" -AllowString).ToUpper()
             $QueryType = if ($QueryType -in @('1', 'SELECT')) { 'Select' } 
             elseif ($QueryType -in @('2', 'SUPPRESS')) { 'Suppress' }
             else {
@@ -281,7 +294,7 @@ function Write-NewQueryElement {
             }
             break
         }
-        Write-Host ""   # BlankLine
+        Write-BlankLine   
 
         # Obtain QueryType XPath
         while ($true) {
@@ -311,7 +324,7 @@ function Write-NewQueryElement {
 
             break
         }
-        Write-Host ""   # BlankLine
+        Write-BlankLine   
 
         # Obtain channel
 
@@ -352,7 +365,7 @@ function Write-NewQueryElement {
             }
             break
         }
-        Write-Host ""   # BlankLine
+        Write-BlankLine   
 
         # Query review
         Write-HostMessage -Message "Query review: $QueryType $Channel $XPathQuery"

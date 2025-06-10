@@ -21,7 +21,7 @@ After that you can optionally type a **SYMBOL PREFIX**. The symbolic names of th
 
 Finally, you'll be asked to input the **CHANNEL STREAM**.These are the logs' specific names. For example, Sysmon has the log `Microsoft-Windows-Sysmon/Operational`, where the provider is `Microsoft-Windows-Sysmon` and the channel stream is `Operational`.
 
-Although the names of these channels is under the engineer's decision, we encourage the use of the following schema:
+Although the names of these channels is under the engineer's decision, I personally prefer the following schema:
 
 |       Channel Stream      |                                                         Description                                                         |
 |:-------------------------:|:---------------------------------------------------------------------------------------------------------------------------:|
