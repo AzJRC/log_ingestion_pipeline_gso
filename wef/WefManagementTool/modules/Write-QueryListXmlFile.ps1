@@ -1,37 +1,85 @@
 using namespace system.collections.generic
 
+
 class QueryTypeElement {
+    static [string] $QUERY_TYPE_SUPPRESS = 'Suppress'
+    static [string] $QUERY_TYPE_SELECT = 'Select'
+
     [ValidateNotNullOrEmpty()][string]$Type             # select | suppress
     [ValidateNotNullOrEmpty()][string]$Channel          # Event channel, like Security or Microsoft-Windows-SMBServer/Security
     [ValidateNotNullOrEmpty()][string]$XPath            # XPath expression, like *[System[(EventID=4624)]]
+    [ValidateNotNullOrEmpty()][list[int]]$Events
 
     QueryTypeElement($Type, $Channel, $XPath) {
         $this.Type = $Type 
         $this.Channel = $Channel
         $this.XPath = $XPath
+        $this.Events = $this.ParseXPathEvents($XPath)
+    }
+
+    [list[int]] ParseXPathEvents($XPath) {
+        $EventList = [list[int]]::new()
+        
+        $SingleEventRegex = 'EventID\s?=\s?(\d+)'
+        $RangeEventRegex = 'EventID\s?&gt;=\s(\d+)\sand\sEventID\s?&lt;=\s?(\d+)'
+
+        $SingleEventMatches = [regex]::Matches($XPath, $SingleEventRegex)
+        foreach ($MatchGroup in $SingleEventMatches) {
+            $EventList.Add([int]$MatchGroup.Groups[1].Value)
+        }
+
+        $RangeEventMatches = [regex]::Matches($XPath, $RangeEventRegex)
+        foreach ($MatchGroup in $RangeEventMatches) {
+            $EventRangeLowerBound = [int]$MatchGroup.Groups[1].Value
+            $EventRangeHigherBound = [int]$MatchGroup.Groups[2].Value
+            foreach ($i in $EventRangeLowerBound..$EventRangeHigherBound) {
+                $EventList.Add($i)
+            }
+        }
+        return $EventList
     }
 }
 
 class QueryElement {
     [int]$QueryId
-    $QueryTypeElements = [list[object]]::new()
+    $SelectQueryElements = [list[object]]::new()
+    $SuppressQueryElements = [list[object]]::new()
+
 
     QueryElement($QueryId) {
         $this.QueryId = $QueryId
     }
 
-    [int] AddQueryTypeElement($QueryTypeElement) {
-        try { $this.QueryTypeElements.Add($QueryTypeElement) } catch { return 1 }
-        return 0
+    [void] AddQueryTypeElement([QueryTypeElement]$QueryTypeElement) {
+        if ($QueryTypeElement.Type -eq [QueryTypeElement]::QUERY_TYPE_SELECT) {
+            $this.SelectQueryElements.Add($QueryTypeElement)
+        }
+        elseif ($QueryTypeElement.Type -eq [QueryTypeElement]::QUERY_TYPE_SUPPRESS) {
+            $this.SuppressQueryElements.Add($QueryTypeElement)
+        }
+        else {
+            throw "Invalid Type: $($QueryTypeElement.Type)"
+        }
+    }
+
+    [list[object]] GetQueryTypeElements() {
+        return ($this.SelectQueryElements + $this.SuppressQueryElements)
+    }
+
+    [list[object]] GetSelectQueryTypeElements() {
+        return ($this.SelectQueryElements)
+    }
+
+    [list[object]] GetSupressQueryTypeElements() {
+        return ($this.SuppressQueryElements)
     }
 }
 
 class QueryListElement {
     $QueryElements = [list[object]]::new()
 
-    [int] AddQueryElement($QueryElement) {
-        try { $this.QueryElements.Add($QueryElement) } catch { return 1 }
-        return 0
+    [void] AddQueryElement($QueryElement) {
+        $this.QueryElements.Add($QueryElement)
     }
 
     [list[object]] InspectQueryElements() {
@@ -42,8 +90,8 @@ class QueryListElement {
         return $this.QueryElements[-1]
     }
 
-    [int] WriteQueryListElement($OutputPath) {
-        return (Write-QueryListXmlFile -QueryList $this.QueryElements -OutputPath $OutputPath)
+    [void] WriteQueryListElement($OutputPath) {
+        Write-QueryListXmlFile -QueryList $this.QueryElements -OutputPath $OutputPath
     }
 }
 
@@ -266,7 +314,10 @@ function Write-NewQueryElement {
         if ($LocalQueryTypeCount -gt 0) {
             $FinishQuery = Read-HostInput -Message "Type 'q' to finish the QueryElement" -Prompt ":" -AllowString
             if ($FinishQuery.ToUpper() -eq "Q") {
-                return $QueryElement
+                # Run Query Optimization/Normalization
+                $NormalizedQueryElement = Get-NormalizedQueryElement -QueryElement $QueryElement
+
+                return $NormalizedQueryElement
             }
             Write-BlankLine   
 
@@ -286,8 +337,8 @@ function Write-NewQueryElement {
         # Obtain QueryType
         while ($true) {
             $QueryType = (Read-HostInput -Message "What Query Type? [ SELECT(1) / SUPPRESS(2) ]" -Prompt ":" -AllowString).ToUpper()
-            $QueryType = if ($QueryType -in @('1', 'SELECT')) { 'Select' } 
-            elseif ($QueryType -in @('2', 'SUPPRESS')) { 'Suppress' }
+            $QueryType = if ($QueryType -in @('1', 'SELECT')) { $QUERY_TYPE_SELECT } 
+            elseif ($QueryType -in @('2', 'SUPPRESS')) { $QUERY_TYPE_SUPPRESS }
             else {
                 Write-HostMessage -err "Invalid option"
                 continue
@@ -365,7 +416,7 @@ function Write-NewQueryElement {
             }
             break
         }
-        Write-BlankLine   
+        Write-BlankLine 
 
         # Query review
         Write-HostMessage -Message "Query review: $QueryType $Channel $XPathQuery"
@@ -376,3 +427,171 @@ function Write-NewQueryElement {
         $LocalQueryTypeCount += 1
     }
 }
+
+function Get-NormalizedQueryElement {
+    param(
+        [QueryElement]$qe
+    )
+    # Normalization/Optimization Function
+
+    # QueryElements with one QueryType Element does not require normalization/optimization
+    if ($qe.GetQueryTypeElements().Count -le 1) { return $qe }
+
+    # Normalization: XPath pre-sorting steps
+    #   First, sort by Channel Path (Alphabetically)
+    #   Second, sort by Event ID (Numerically)
+    #
+    #   Before:
+    #   <Query>
+    #       <Select Path="Application">*[System[(EventID=5615)]]</Select>
+    #       <Suppress Path="Security">*[System[(EventID=4625)]]</Suppress>
+    #       <Select Path="Security">*[System[(EventID=4624)]]</Select>
+    #       <Select Path="Application">*[System[(EventID=5617)]]</Select>
+    #   </Query>
+    #
+    #   After:
+    #   <Query>
+    #       <Select Path="Application">*[System[(EventID=5615)]]</Select>
+    #       <Select Path="Application">*[System[(EventID=5617)]]</Select> 
+    #       <Select Path="Security">*[System[(EventID=4624)]]</Select>
+    #       <Suppress Path="Security">*[System[(EventID=4625)]]</Suppress>
+    #   </Query>
+
+    # [TODO] Sort by channel
+    $Lptr = 0
+    $Rptr = $qe.GetQueryTypeElements().Count - 1
+    $LptrElementChannel = $qe.GetQueryTypeElements()[$Lptr].Channel
+    $RptrElementChannel = $qe.GetQueryTypeElements()[$Rptr].Channel
+
+    # [TODO] Sort by EventID
+    $Lptr = 0
+    $Rptr = $qe.GetQueryTypeElements().Count - 1
+    $LptrElementEventID = [int]($qe.GetQueryTypeElements()[$Lptr].XPath | Select-String -Pattern '\(EventID=(\d+)\)').Matches.Groups[1].Value
+    $RptrElementEventID = [int]($qe.GetQueryTypeElements()[$Rptr].XPath | Select-String -Pattern '\(EventID=(\d+)\)').Matches.Groups[1].Value
+
+
+    # Optimization: XPath Selector QueryType Compression
+    #   Minimize the number of QueryType elements by analyzing the content of the Query
+    #   E.g. If there are standalone <Select> elements that query subsequent EventIDs, merge.
+    #
+    #   Before:
+    #   <Query>
+    #       <Select Path="Security">*[System[(EventID=4624)]]</Select>
+    #       <Select Path="Security">*[System[(EventID=4625)]]</Select>
+    #   </Query>
+    #
+    #   After:
+    #   <Query>
+    #       <Select Path="Security">*[System[(EventID gt;= 4624 and EventID lt;= 4625)]]</Select>
+    #   </Query>
+
+    $NewQE = [QueryElement]::new($qe.QueryId)
+    $QueryTypeCount = $qe.GetSelectQueryTypeElements().Count
+    $lastQTEAdded = $false
+    $Lptr = 0
+    $Rptr = $Lptr + 1
+    while ($true) {
+        $LptrQTE = $qe.GetSelectQueryTypeElements()[$Lptr]
+        $LptrEventId = [int](($LptrQTE.XPath | Select-String -Pattern '\(EventID=(\d+)\)').Matches.Groups[1].Value)
+
+        # End of list
+        if ($Rptr -ge $QueryTypeCount) { break }
+
+        $RptrQTE = $qe.GetSelectQueryTypeElements()[$Rptr]
+        $RptrEventId = [int](($RptrQTE.XPath | Select-String -Pattern '\(EventID=(\d+)\)').Matches.Groups[1].Value)
+
+        $SubsequentCounter = 1
+        if (-not (($LptrEventId + $SubsequentCounter) -eq $RptrEventId) -or ($LptrQTE.Channel -ne $RptrQTE.Channel)) {
+            # if subsequense test fails, continue
+            [void]$NewQE.AddQueryTypeElement($LptrQTE)
+            $Lptr = $Rptr
+            $Rptr += 1
+            continue
+        }
+
+        while ((($LptrEventId + $SubsequentCounter) -eq $RptrEventId) -and ($LptrQTE.Channel -eq $RptrQTE.Channel)) {
+            $Rptr += if ($Rptr -ge $QueryTypeCount - 1) { 0 } else { 1 }
+            $RptrQTE = $qe.GetQueryTypeElements()[$Rptr]
+            $RptrEventId = [int](($RptrQTE.XPath | Select-String -Pattern '\(EventID=(\d+)\)').Matches.Groups[1].Value)
+            $SubsequentCounter += 1
+        }
+        #  (4624, 4625, 4626) (4630 4631 ... ) 4640 4645 
+        #    |                  |
+        #  $Lptr              $Rptr
+
+        # Generate first group ranged query
+        $NewQTEXPath = "*[System[(EventID &gt;= $($LptrEventId) and EventID &lt;= $($LptrEventId + $SubsequentCounter - 1))]]"
+        
+        if (($Lptr + $SubsequentCounter) -eq $QueryTypeCount) { $lastQTEAdded = $true }
+
+        $NewQTE = [QueryTypeElement]::new($LptrQTE.Type, $LptrQTE.Channel, $NewQTEXPath)
+        [void]$NewQE.AddQueryTypeElement($NewQTE)
+        $Lptr = $Rptr
+        $Rptr += 1
+
+        #  (4624, 4625, 4626) (4630 4631 ... ) 4640
+        #                        |    |
+        #                     $Lptr $Rptr
+    }
+
+    if (-not ($lastQTEAdded)) {
+        $LptrQTE = $qe.GetSelectQueryTypeElements()[$Lptr]
+        $NewQTE = [QueryTypeElement]::new($LptrQTE.Type, $LptrQTE.Channel, $LptrQTE.XPath)
+        [void]$NewQE.AddQueryTypeElement($NewQTE)
+    }
+
+    return $NewQE
+}
+
+function Test-QueryNormalization {
+    param(
+        [int[]]$EventIDs,
+        [string[]]$Channels,
+        [string[]]$Types
+    )
+
+    $qe = [QueryElement]::new(0)
+    for ($i = 0; $i -lt $EventIDs.Length; $i++) {
+        $newQte = [QueryTypeElement]::new($($Types[$i]), $($Channels[$i]), "*[System[(EventID=$($EventIDs[$i]))]]")
+        $qe.AddQueryTypeElement($newQte)
+    }
+
+    $nqe = Get-NormalizedQueryElement($qe)
+
+    Write-Host "After Normalization:"
+    $nqe.GetQueryTypeElements() | Format-Table
+}
+
+# Test Case 1: Basic compressible range on same Channel/Type
+# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
+
+# Test Case 2: Mixed Channel → should not merge across channels
+# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'System', 'Security', 'System') -Types @('Select', 'Select', 'Select', 'Select')
+
+# Test Case 3: Mixed Type → Select + Suppress → should not merge across types
+# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Suppress', 'Select', 'Suppress')
+
+# Test Case 4: Compressible group, with gap → test that gaps break merge
+# Test-QueryNormalization -EventIDs @(4624, 4625, 4627, 4628) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
+
+# Test Case 5: Mixed Channel + Type + out-of-order input → test sorting
+# Test-QueryNormalization -EventIDs @(4628, 4624, 4626, 4625, 4627) -Channels @('System', 'Security', 'Security', 'Security', 'System') -Types @('Suppress', 'Select', 'Select', 'Select', 'Select')
+
+# Test Case 6: Empty input → should handle cleanly
+# est-QueryNormalization -EventIDs @() -Channels @() -Types @()
+
+# Test Case 7: Single element → should remain single
+# Test-QueryNormalization -EventIDs @(4624) -Channels @('Security') -Types @('Select')
+
+# Test Case 8: Complex pattern with multiple groups, different channels/types
+Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4630, 4631, 4632, 4640, 4641, 4642) `
+    -Channels @('Security', 'Security', 'Security', 'System', 'Security', 'System', 'Security', 'Security', 'System') `
+    -Types @('Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select')
+
+# Test Case 9: All EventIDs the same → should produce single merged output (degenerate case)
+# Test-QueryNormalization -EventIDs @(4624, 4624, 4624, 4624) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
+
+# Test Case 10: Large out-of-order list, mixed everything → full robustness test
+# Test-QueryNormalization -EventIDs @(4627, 4624, 4630, 4625, 4640, 4626, 4631, 4632, 4628, 4629, 4641) `
+#    -Channels @('Security', 'System', 'Security', 'System', 'System', 'Security', 'Security', 'System', 'System', 'Security', 'Security') `
+#    -Types @('Suppress', 'Select', 'Select', 'Suppress', 'Select', 'Select', 'Select', 'Suppress', 'Select', 'Select', 'Select')
