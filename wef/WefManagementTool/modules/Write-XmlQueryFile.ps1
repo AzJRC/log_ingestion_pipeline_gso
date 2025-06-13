@@ -8,7 +8,7 @@ class QueryTypeElement {
     [ValidateNotNullOrEmpty()][string]$Type             # select | suppress
     [ValidateNotNullOrEmpty()][string]$Channel          # Event channel, like Security or Microsoft-Windows-SMBServer/Security
     [ValidateNotNullOrEmpty()][string]$XPath            # XPath expression, like *[System[(EventID=4624)]]
-    [ValidateNotNullOrEmpty()][list[int]]$Events
+    [list[int]]$Events
 
     QueryTypeElement($Type, $Channel, $XPath) {
         $this.Type = $Type 
@@ -19,6 +19,10 @@ class QueryTypeElement {
 
     [list[int]] ParseXPathEvents($XPath) {
         $EventList = [list[int]]::new()
+
+        if (-not ($XPath -match 'EventID')) {
+            return $EventList
+        }
         
         $SingleEventRegex = 'EventID\s?=\s?(\d+)'
         $RangeEventRegex = 'EventID\s?&gt;=\s(\d+)\sand\sEventID\s?&lt;=\s?(\d+)'
@@ -44,7 +48,6 @@ class QueryElement {
     [int]$QueryId
     $SelectQueryElements = [list[object]]::new()
     $SuppressQueryElements = [list[object]]::new()
-
 
     QueryElement($QueryId) {
         $this.QueryId = $QueryId
@@ -82,7 +85,7 @@ class QueryListElement {
         $this.QueryElements.Add($QueryElement)
     }
 
-    [list[object]] InspectQueryElements() {
+    [list[object]] GetQueryElements() {
         return $this.QueryElements
     }
 
@@ -92,6 +95,14 @@ class QueryListElement {
 
     [void] WriteQueryListElement($OutputPath) {
         Write-QueryListXmlFile -QueryList $this.QueryElements -OutputPath $OutputPath
+    }
+
+    [int] GetQueryTypeElementCount() {
+        $count = 0
+        Foreach ($QueryElement in $this.QueryElements) {    
+            $count += $QueryElement.GetQueryTypeElementCount().Count
+        }
+        return $count
     }
 }
 
@@ -146,7 +157,7 @@ function Read-HostInput {
         [string]$Message,
         [switch]$AllowString
     )
-    Write-Host ($Message + $Prompt) -ForegroundColor Cyan -NoNewline
+    Write-Host ($Message + " " + $Prompt + " ") -ForegroundColor Cyan -NoNewline
     $UserInput = $Host.UI.ReadLine()
     if ($AllowString) { return $UserInput }
     if ($UserInput -match "^[\d\.]+$") { return $UserInput }
@@ -198,7 +209,7 @@ function Write-QueryListXmlFile {
     Write-HostMessage -success -Message "XML successfully written to: $OutputPath"
 }
 
-function Write-XmlQuery {
+function Write-XmlQueryFile {
     param(
         [string]$OutputPath = "$PSScriptRoot\..\Files\SubscriptionEventXmlQuery.xml"
     )
@@ -213,14 +224,14 @@ function Write-XmlQuery {
     $QueryList = [QueryListElement]::new()
 
     # AccountingVariables
-    $QueryElementCount = 0
-    $QueryTypeElementCount = 0
     $XmlFileWritten = $false
+    $QueryElementCount = $QueryList.QueryElements.Count
+    $QueryTypeElementCount = $QueryList.GetQueryTypeElementCount()
 
     while ($true) {
         Write-HostTitle -Message "Event XML Writer Module"
         Write-HostMessage -Message "QueryElementCount: [$QueryElementCount]"
-        Write-HostMessage -Message "QueryTypeElementCount: [$QueryTypeElementCount]"
+        Write-HostMessage -Message "QueryTypeElementCount: [$QueryTypeElementCount]" # [TODO] Broken after refactoring classes
 
         Write-BlankLine
 
@@ -233,11 +244,11 @@ function Write-XmlQuery {
 
         Write-BlankLine
 
-        $Option = Read-HostInput -Prompt " > " -Message "Enter option number"
+        $Option = Read-HostInput -Message "Enter option number" -Prompt ">"
         Switch ($Option) {
             1 {    
                 try {    
-                    $NewQueryElement = Write-NewQueryElement -QueryElementId ($QueryElementCount + 1) 
+                    $NewQueryElement = Write-NewQueryElement -QueryElementId ($QueryTypeElementCount + 1) 
                 }
                 catch { 
                     Write-HostMessage -err -Message "Failed to create new QueryElement"
@@ -271,9 +282,9 @@ function Write-XmlQuery {
             }
             3 {
                 # [TODO]
-                # Print query list content with format; not urgent.
-                # Temporal solution...
-                $QueryList.InspectQueryElements() | ForEach-Object {
+                # Broken functionality after refactoring classes
+                Write-HostMessage -warning -Message "[TODO] Broken Functionality"
+                $QueryList.GetQueryElements() | ForEach-Object {
                     Write-HostMessage -Message "QueryElement ID: $($_.QueryId)"
                     $_.QueryTypeElements | ForEach-Object {
                         Write-HostMessage -NoSymbol -Message "Type: $($_.Type) - Channel: $($_.Channel) - XPath: $($_.XPath)" 
@@ -314,9 +325,16 @@ function Write-NewQueryElement {
         if ($LocalQueryTypeCount -gt 0) {
             $FinishQuery = Read-HostInput -Message "Type 'q' to finish the QueryElement" -Prompt ":" -AllowString
             if ($FinishQuery.ToUpper() -eq "Q") {
+                
                 # Run Query Optimization/Normalization
-                $NormalizedQueryElement = Get-NormalizedQueryElement -QueryElement $QueryElement
-
+                Write-HostMessage -Message "Attempting QueryElement Normalization..."
+                try {
+                    $NormalizedQueryElement = Get-NormalizedQueryElement -QueryElement $QueryElement
+                }
+                catch {
+                    Write-HostMessage -warning -Message "Normalization unsuccessuful"
+                    return $QueryElement
+                }
                 return $NormalizedQueryElement
             }
             Write-BlankLine   
@@ -337,8 +355,8 @@ function Write-NewQueryElement {
         # Obtain QueryType
         while ($true) {
             $QueryType = (Read-HostInput -Message "What Query Type? [ SELECT(1) / SUPPRESS(2) ]" -Prompt ":" -AllowString).ToUpper()
-            $QueryType = if ($QueryType -in @('1', 'SELECT')) { $QUERY_TYPE_SELECT } 
-            elseif ($QueryType -in @('2', 'SUPPRESS')) { $QUERY_TYPE_SUPPRESS }
+            $QueryType = if ($QueryType -in @('1', 'SELECT')) { [QueryTypeElement]::QUERY_TYPE_SELECT } 
+            elseif ($QueryType -in @('2', 'SUPPRESS')) { $[QueryTypeElement]::QUERY_TYPE_SUPPRESS }
             else {
                 Write-HostMessage -err "Invalid option"
                 continue
@@ -419,8 +437,9 @@ function Write-NewQueryElement {
         Write-BlankLine 
 
         # Query review
-        Write-HostMessage -Message "Query review: $QueryType $Channel $XPathQuery"
+        
         $NewQueryTypeElement = [QueryTypeElement]::new($QueryType, $Channel, $XPathQuery)
+        Write-HostMessage -Message "QueryType Element Quick Review: [ Type: $QueryType ] [ Channel: $Channel ] [ XPath: $XPathQuery ]"
         if ($QueryElement.AddQueryTypeElement($NewQueryTypeElement) -eq 1) {
             Write-HostMessage -err "There was a problem adding the QueryType element"
         }
@@ -432,8 +451,6 @@ function Get-NormalizedQueryElement {
     param(
         [QueryElement]$QueryElement
     )
-
-    # Normalization/Optimization Function
 
     # QueryElements with one QueryType Element do not require normalization/optimization
     if ($QueryElement.GetQueryTypeElements().Count -le 1) { return $QueryElement }
@@ -584,36 +601,6 @@ function Test-QueryNormalization {
     $nqe.GetQueryTypeElements() | Format-Table
 }
 
-# Test Case 1: Basic compressible range on same Channel/Type
-# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
 
-# Test Case 2: Mixed Channel → should not merge across channels
-# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'System', 'Security', 'System') -Types @('Select', 'Select', 'Select', 'Select')
-
-# Test Case 3: Mixed Type → Select + Suppress → should not merge across types
-# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4627) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Suppress', 'Select', 'Suppress')
-
-# Test Case 4: Compressible group, with gap → test that gaps break merge
-# Test-QueryNormalization -EventIDs @(4624, 4625, 4627, 4628) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
-
-# Test Case 5: Mixed Channel + Type + out-of-order input → test sorting
-# Test-QueryNormalization -EventIDs @(4628, 4624, 4626, 4625, 4627) -Channels @('System', 'Security', 'Security', 'Security', 'System') -Types @('Suppress', 'Select', 'Select', 'Select', 'Select')
-
-# Test Case 6: Empty input → should handle cleanly
-# est-QueryNormalization -EventIDs @() -Channels @() -Types @()
-
-# Test Case 7: Single element → should remain single
-# Test-QueryNormalization -EventIDs @(4624) -Channels @('Security') -Types @('Select')
-
-# Test Case 8: Complex pattern with multiple groups, different channels/types
-# Test-QueryNormalization -EventIDs @(4624, 4625, 4626, 4630, 4631, 4632, 4640, 4641, 4642) `
-#    -Channels @('Security', 'Security', 'Security', 'Security', 'Security', 'Security', 'Security', 'Security', 'Security') `
-#    -Types @('Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select', 'Select')
-
-# Test Case 9: All EventIDs the same → should produce single merged output (degenerate case)
-Test-QueryNormalization -EventIDs @(4624, 4624, 4624, 4624) -Channels @('Security', 'Security', 'Security', 'Security') -Types @('Select', 'Select', 'Select', 'Select')
-
-# Test Case 10: Large out-of-order list, mixed everything → full robustness test
-Test-QueryNormalization -EventIDs @(4627, 4624, 4630, 4625, 4640, 4626, 4631, 4632, 4628, 4629, 4641) `
-    -Channels @('Security', 'System', 'Security', 'System', 'System', 'Security', 'Security', 'System', 'System', 'Security', 'Security') `
-    -Types @('Suppress', 'Select', 'Select', 'Suppress', 'Select', 'Select', 'Select', 'Suppress', 'Select', 'Select', 'Select')
+# Call Main
+Write-XmlQueryFile
