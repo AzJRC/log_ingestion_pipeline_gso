@@ -1,6 +1,4 @@
 using namespace system.collections.generic
-
-
 class QueryTypeElement {
     static [string] $QUERY_TYPE_SUPPRESS = 'Suppress'
     static [string] $QUERY_TYPE_SELECT = 'Select'
@@ -106,109 +104,20 @@ class QueryListElement {
     }
 }
 
-# Helper variables
-$WriteHostTitlePadding = " " * 3
-$WriteHostMenuPadding = " " * 3
-$WriteHostOptionPadding = " " * 6
-$WriteHostMessagePadding = " " * 3
+# Helper global variables
+$AvailableChannels = $(wevtutil.exe el) # List of Windows Event Logs
 
-# Helper functions
-function Write-HostTitle {
-    param ([string]$Message)
-    Write-Host ( "`n" + $WriteHostTitlePadding + "[ " + $Message + " ]" + "`n") -ForegroundColor Cyan
-}
+# Load dependencies
+$CommonUtilities = "$PSScriptRoot/Utilities/CommonUtilities.ps1"
+if (Test-Path $CommonUtilities) { . $CommonUtilities } else { Write-HostMessage -err -Message "Missing dependency: [CommonUtilities.ps1]"; return 1 }
 
-function Write-HostMenu {
-    param ([string]$Message)
-    Write-Host ($WriteHostMenuPadding + $Message) -ForegroundColor Cyan
-}
+<#
+.SYNOPSIS
+[TODO]
 
-function Write-HostMenuOption {
-    param (
-        [string]$Message,
-        [int]$OptionNumber
-    )
-    Write-Host $WriteHostOptionPadding -NoNewline
-    if ($OptionNumber -is [int]) { Write-Host "[$OptionNumber] " -ForegroundColor Cyan -NoNewline }
-    Write-Host $Message -ForegroundColor Gray
-}
-
-# Utility variables
-$AvailableChannels = $(wevtutil.exe el)
-
-# Utility functions
-function Write-HostMessage {
-    param (
-        [string]$Message,
-        [switch]$warning,
-        [switch]$err,
-        [switch]$success,
-        [switch]$NoSymbol
-    )
-    if ($err) { Write-Host ($WriteHostMessagePadding + $(if (-not $NoSymbol) { "[-] " }) + $Message) -ForegroundColor Red; return $null }
-    if ($warning) { Write-Host ($WriteHostMessagePadding + $(if (-not $NoSymbol) { "[!] " }) + $Message) -ForegroundColor Yellow; return $null }
-    if ($success) { Write-Host ($WriteHostMessagePadding + $(if (-not $NoSymbol) { "[+] " }) + $Message) -ForegroundColor Green; return $null }
-    Write-Host ($WriteHostMessagePadding + $(if (-not $NoSymbol) { "[*] " }) + $Message) -ForegroundColor Gray
-}
-
-function Read-HostInput {
-    param (
-        [string]$Prompt,
-        [string]$Message,
-        [switch]$AllowString
-    )
-    Write-Host ($Message + " " + $Prompt + " ") -ForegroundColor Cyan -NoNewline
-    $UserInput = $Host.UI.ReadLine()
-    if ($AllowString) { return $UserInput }
-    if ($UserInput -match "^[\d\.]+$") { return $UserInput }
-    return $null
-}
-
-function Write-BlankLine { Write-Host "" }
-
-# Write QueryList XML File - (https://learn.microsoft.com/en-us/windows/win32/wes/queryschema-schema)
-function Write-QueryListXmlFile {
-    param(
-        [Parameter(Mandatory = $true)][list[object]]$QueryList,
-        [Parameter(Mandatory = $true)][string]$OutputPath
-    )
-
-    if (-not (Test-Path $OutputPath)) {
-        Write-Error "[-] Invalid OutputPath. Maybe the path does not exists."
-        return 1
-    }
-
-    Write-Host "[+] Writing QueryList to XML file" -ForegroundColor Cyan
-
-    $XmlWriter = New-Object System.XMl.XmlTextWriter($OutputPath, $null)
-    $XmlWriter.Formatting = "Indented"
-    $XmlWriter.Indentation = 4
-
-    $XmlWriter.WriteStartDocument()
-    $XmlWriter.WriteStartElement("QueryList")
-
-    foreach ($QueryElement in $QueryList) {
-        $XmlWriter.WriteStartElement("Query")
-        $XmlWriter.WriteAttributeString("Id", $QueryElement.QueryId.ToString())
-
-        foreach ($QueryTypeElement in $QueryElement.QueryTypeElements) {
-            $XmlWriter.WriteStartElement($QueryTypeElement.Type)
-            $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
-            $XmlWriter.WriteString($QueryTypeElement.XPath)
-            $XmlWriter.WriteEndElement()  # Close Select or Suppress element
-        }
-
-        $XmlWriter.WriteEndElement()  # Close Query element
-    }
-
-    $XmlWriter.WriteEndElement()  # Close QueryList element
-    $XmlWriter.WriteEndDocument()
-    $XmlWriter.Flush()
-    $XmlWriter.Close()
-
-    Write-HostMessage -success -Message "XML successfully written to: $OutputPath"
-}
-
+.DESCRIPTION
+[TODO]
+#>
 function Write-XmlQueryFile {
     param(
         [string]$OutputPath = "$PSScriptRoot\..\Files\SubscriptionEventXmlQuery.xml"
@@ -303,11 +212,9 @@ function Write-XmlQueryFile {
                         break
                     }
                 }
-                return 0
+                return
             }
-            default {
-                Write-HostMessage -err "Invalid option"
-            }
+            default { Write-HostMessage -err "Invalid option" }
         }
     }
 }
@@ -582,25 +489,49 @@ function Get-NormalizedQueryElement {
     return $NewQueryElement
 }
 
-function Test-QueryNormalization {
+function Write-QueryListXmlFile {
+    # Write QueryList XML File - (https://learn.microsoft.com/en-us/windows/win32/wes/queryschema-schema)
     param(
-        [int[]]$EventIDs,
-        [string[]]$Channels,
-        [string[]]$Types
+        [Parameter(Mandatory = $true)][list[object]]$QueryList,
+        [Parameter(Mandatory = $true)][string]$OutputPath
     )
 
-    $qe = [QueryElement]::new(0)
-    for ($i = 0; $i -lt $EventIDs.Length; $i++) {
-        $newQte = [QueryTypeElement]::new($($Types[$i]), $($Channels[$i]), "*[System[(EventID=$($EventIDs[$i]))]]")
-        $qe.AddQueryTypeElement($newQte)
+    if (-not (Test-Path $OutputPath)) {
+        Write-HostMessage -err -Message "Invalid OutputPath. Maybe the path does not exists."
+        return 1
     }
 
-    $nqe = Get-NormalizedQueryElement($qe)
+    Write-HostMessage -Message "Writing QueryList XML file" 
 
-    Write-Host "After Normalization:"
-    $nqe.GetQueryTypeElements() | Format-Table
+    $XmlWriter = New-Object System.XMl.XmlTextWriter($OutputPath, $null)
+    $XmlWriter.Formatting = "Indented"
+    $XmlWriter.Indentation = 4
+
+    $XmlWriter.WriteStartDocument()
+    $XmlWriter.WriteStartElement("QueryList")
+
+    foreach ($QueryElement in $QueryList) {
+        $XmlWriter.WriteStartElement("Query")
+        $XmlWriter.WriteAttributeString("Id", $QueryElement.QueryId.ToString())
+
+        foreach ($QueryTypeElement in $QueryElement.QueryTypeElements) {
+            $XmlWriter.WriteStartElement($QueryTypeElement.Type)
+            $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
+            $XmlWriter.WriteString($QueryTypeElement.XPath)
+            $XmlWriter.WriteEndElement()  # Close Select or Suppress element
+        }
+
+        $XmlWriter.WriteEndElement()  # Close Query element
+    }
+
+    $XmlWriter.WriteEndElement()  # Close QueryList element
+    $XmlWriter.WriteEndDocument()
+    $XmlWriter.Flush()
+    $XmlWriter.Close()
+
+    Write-HostMessage -success -Message "QueryList successfully written to: $OutputPath"
+    return
 }
-
 
 # Call Main
 Write-XmlQueryFile

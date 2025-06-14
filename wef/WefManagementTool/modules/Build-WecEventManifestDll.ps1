@@ -216,3 +216,6 @@ function Resolve-ExecutablePath {
 
     return $CurrentValue
 }
+
+# Run Main
+Build-WecEventManifestDll

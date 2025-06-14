@@ -44,7 +44,7 @@ function Set-WecEventChannels {
     param(
         [Parameter(Mandatory = $false, Position = 0, HelpMessage = "A .txt file with the custom event channels (one per line) to deploy.")]
         [Alias("Channels")]
-        [string]$ChannelsFile = "$PSScriptRoot\..\Files\Channels.txt",
+        [string]$ChannelsFile = "$PSScriptRoot\..\Files\ProvidersChannelsSummary.csv",
 
         [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Default root path for channel stream log files.")]
         [Alias("Root")]
@@ -78,7 +78,9 @@ function Set-WecEventChannels {
         throw "Channel file not found: $ChannelsFile"
     }
 
-    $CustomChannels = Get-Content -Path $ChannelsFile | Where-Object { $_.Trim() -ne "" }
+    # Read channel list from CSV file
+    $CustomChannels = Import-Csv -Path $ChannelsFile | Select-Object -ExpandProperty Channel
+
 
     foreach ($ChannelName in $CustomChannels) {
         Write-Host "Configuring event channel: $ChannelName" -ForegroundColor Cyan
