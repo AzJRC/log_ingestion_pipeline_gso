@@ -1,0 +1,30 @@
+<!--
+    QueryName:      Account Management
+    QueryIntent:    Identity and Access > User Account management
+    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
+    
+    Attack:         T1098
+    
+    Tag:            Access Control
+    Tag:            Security Monitoring
+    Tag:            Audit Policy
+-->
+<Query id="0">
+    <!--
+        (4720) A user account was created (S)
+        (4722) A user account was enabled (S)
+        (4723) Attempt to change an account’s password (S)
+        (4724) Attempt to reset an account’s password (S)
+        (4725) A user account was disabled (S)
+        (4726) A user account was deleted (S)
+        (4738) A user account was changed (S)
+        (4740) A user account was locked out (S)
+        (4767) A user account was unlocked (S)
+        (4781) The name of an account was changed (S)
+        (4782) The password hash of an account was accessed (S)
+        (4793) Password policy API called (S)
+    -->
+    <Select Path="Security">*[System[(EventID=4720 or EventID=4722 or EventID=4723 or EventID=4724
+        or EventID=4725 or EventID=4726 or EventID=4738 or EventID=4740 or EventID=4767 or
+        EventID=4781 or EventID=4782 or EventID=4793)]]</Select>
+</Query>

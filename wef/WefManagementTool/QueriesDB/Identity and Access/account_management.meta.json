@@ -1,0 +1,44 @@
+{
+    "name": "account_management",
+    "description": "",
+    "query_intent": {
+        "intent": "identity_and_access",
+        "sub_intent": "user_account_management",
+        "sub_sub_intent": ""
+    },
+    "events": [
+        4720,
+        4722,
+        4723,
+        4724,
+        4725,
+        4726,
+        4738,
+        4740,
+        4767,
+        4781,
+        4782,
+        4793
+    ],
+    "providers": [
+        "Microsoft-Windows-Security-Auditing"
+    ],
+    "channels": [
+        "Security"
+    ],
+    "authors": [
+        {
+            "name": "Alejandro Rodriguez",
+            "username": "azjrc",
+            "project": ""
+        }
+    ],
+    "attack_mappings": [
+        "T1098"
+    ],
+    "tags": [
+        "access_control",
+        "security_monitoring",
+        "audit_policy"
+    ]
+}

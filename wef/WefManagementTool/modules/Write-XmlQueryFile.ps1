@@ -44,8 +44,8 @@ class QueryTypeElement {
 
 class QueryElement {
     [int]$QueryId
-    $SelectQueryElements = [list[object]]::new()
-    $SuppressQueryElements = [list[object]]::new()
+    $SelectQueryElements = [list[QueryTypeElement]]::new()
+    $SuppressQueryElements = [list[QueryTypeElement]]::new()
 
     QueryElement($QueryId) {
         $this.QueryId = $QueryId
@@ -63,31 +63,31 @@ class QueryElement {
         }
     }
 
-    [list[object]] GetQueryTypeElements() {
+    [list[QueryTypeElement]] GetQueryTypeElements() {
         return ($this.SelectQueryElements + $this.SuppressQueryElements)
     }
 
-    [list[object]] GetSelectQueryTypeElements() {
+    [list[QueryTypeElement]] GetSelectQueryTypeElements() {
         return ($this.SelectQueryElements)
     }
 
-    [list[object]] GetSupressQueryTypeElements() {
+    [list[QueryTypeElement]] GetSupressQueryTypeElements() {
         return ($this.SuppressQueryElements)
     }
 }
 
 class QueryListElement {
-    $QueryElements = [list[object]]::new()
+    $QueryElements = [list[QueryElement]]::new()
 
     [void] AddQueryElement($QueryElement) {
         $this.QueryElements.Add($QueryElement)
     }
 
-    [list[object]] GetQueryElements() {
+    [list[QueryElement]] GetQueryElements() {
         return $this.QueryElements
     }
 
-    [object] GetLastQueryElement() {
+    [QueryElement] GetLastQueryElement() {
         return $this.QueryElements[-1]
     }
 
@@ -129,18 +129,23 @@ function Write-XmlQueryFile {
         New-Item -Path $OutputPath -Force > $null
     }
 
-    # Initialize QueryListElement
+    # Initialize QueryElementList
     $QueryList = [QueryListElement]::new()
 
     # AccountingVariables
     $XmlFileWritten = $false
-    $QueryElementCount = $QueryList.QueryElements.Count
-    $QueryTypeElementCount = $QueryList.GetQueryTypeElementCount()
+    
 
     while ($true) {
+
+        $QueryTypeElementCount = 0
+        foreach ($QueryElement in $QueryList.QueryElements) {
+            $QueryTypeElementCount = $QueryElement.SelectQueryElements.Count + $QueryElement.SuppressQueryElements.Count
+        }
+
         Write-HostTitle -Message "Event XML Writer Module"
-        Write-HostMessage -Message "QueryElementCount: [$QueryElementCount]"
-        Write-HostMessage -Message "QueryTypeElementCount: [$QueryTypeElementCount]" # [TODO] Broken after refactoring classes
+        Write-HostMessage -Message "QueryElementCount: [$($QueryList.QueryElements.Count)]"
+        Write-HostMessage -Message "QueryTypeElementCount: [$QueryTypeElementCount]"
 
         Write-BlankLine
 
@@ -156,28 +161,22 @@ function Write-XmlQueryFile {
         $Option = Read-HostInput -Message "Enter option number" -Prompt ">"
         Switch ($Option) {
             1 {    
-                try {    
-                    $NewQueryElement = Write-NewQueryElement -QueryElementId ($QueryTypeElementCount + 1) 
+                try {
+                    $NewQueryElement = [QueryElement]::new($QueryElementId)
+                    Write-NewQueryElement -QueryElementId ($QueryList.QueryElements.Count + 1) -QueryElement $NewQueryElement
                 }
                 catch { 
                     Write-HostMessage -err -Message "Failed to create new QueryElement"
                     Write-Host $_
                     break
                 }
-                if ($NewQueryElement -is [list[object]]) {
-                    foreach ($QueryElement in $NewQueryElement) {
-                        $QueryList.AddQueryElement($QueryElement)
-                        # [BUG?] I don't know why, but I need to substract one from the list length to get the correct result.
-                        $QueryTypeElementCount += $QueryList.GetLastQueryElement().QueryTypeElements.Count
-                    }
+                # treat $NewQueryElement as a collection; user may import various query elements
+                foreach ($QueryElement in @($NewQueryElement)) {
+                    $QueryList.AddQueryElement($QueryElement)
                 }
-                else {
-                    $QueryList.AddQueryElement($NewQueryElement)
-                    # [BUG?] I don't know why, but I need to substract one from the list length to get the correct result.
-                    $QueryTypeElementCount += $QueryList.GetLastQueryElement().QueryTypeElements.Count
-                }
-                $QueryElementCount += 1
+
                 Write-HostMessage -success -Message "QueryElement added successfully"
+                break
             }
             2 {
                 # [TODO]
@@ -186,7 +185,7 @@ function Write-XmlQueryFile {
                 #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
                 # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
                 # Query blocks are also tagged with author name. E.g. 
-
+                $ImportedQueryElementIdentifier = Search-QueryElementIdentifier
 
             }
             3 {
@@ -220,9 +219,11 @@ function Write-XmlQueryFile {
 }
 
 function Write-NewQueryElement {
-    param($QueryElementId)
+    param(
+        [int]$QueryElementId,
+        [QueryElement]$QueryElement
+    )
 
-    $QueryElement = [QueryElement]::new($QueryElementId)
     $LocalQueryTypeCount = 0
 
     # QueryElementLoop
@@ -236,16 +237,17 @@ function Write-NewQueryElement {
                 # Run Query Optimization/Normalization
                 Write-HostMessage -Message "Attempting QueryElement Normalization..."
                 try {
-                    $NormalizedQueryElement = Get-NormalizedQueryElement -QueryElement $QueryElement
+                    [QueryElement]$NormalizedQueryElement = Get-NormalizedQueryElement -QueryElement $QueryElement
                 }
                 catch {
                     Write-HostMessage -warning -Message "Normalization unsuccessuful"
                     return $QueryElement
                 }
-                return $NormalizedQueryElement
+                $QueryElement.SelectQueryElements = $NormalizedQueryElement.SelectQueryElements
+                $QueryElement.SuppressQueryElements = $NormalizedQueryElement.SuppressQueryElements
+                return
             }
             Write-BlankLine   
-
         }
         
 
@@ -278,10 +280,10 @@ function Write-NewQueryElement {
         
             # Normalize Xpath syntax
             $XPathQuery = $XPathQuery -replace '(?i)eventid', 'EventID'
-            $XPathQuery = $XPathQuery.Replace('>', 'gt;=')     # *[System[(EventID > 4624)]] -> *[System[(EventID gt;= 4624)]]
-            $XPathQuery = $XPathQuery.Replace('<', 'lt;=')     # *[System[(EventID < 4624)]] -> *[System[(EventID lt;= 4624)]]
-            $XPathQuery = $XPathQuery.Replace('&', 'and')      # *[System[(EventID > 4624 & EventID < 4625)]] -> *[System[(EventID gt;= 4624 and EventID lt;= 4625)]]
-            $XPathQuery = $XPathQuery.Replace('||', 'or')      # *[System[(EventID = 4624 || EventID = 4625)]] -> *[System[(EventID = 4624 or EventID = 4625)]]
+            $XPathQuery = $XPathQuery.Replace('>=', '&gt;=')     # *[System[(EventID >= 4624)]] -> *[System[(EventID &gt;= 4624)]]
+            $XPathQuery = $XPathQuery.Replace('<=', '&lt;=')     # *[System[(EventID <= 4624)]] -> *[System[(EventID &lt;= 4624)]]
+            # $XPathQuery = $XPathQuery.Replace('&', 'and')      # *[System[(EventID > 4624 & EventID < 4625)]] -> *[System[(EventID gt;= 4624 and EventID lt;= 4625)]]
+            # $XPathQuery = $XPathQuery.Replace('||', 'or')      # *[System[(EventID = 4624 || EventID = 4625)]] -> *[System[(EventID = 4624 or EventID = 4625)]]
         
             # Run partial validations of the XPath expression syntax
             # (https://learn.microsoft.com/en-us/windows/win32/wes/consuming-events)
@@ -347,13 +349,13 @@ function Write-NewQueryElement {
         
         $NewQueryTypeElement = [QueryTypeElement]::new($QueryType, $Channel, $XPathQuery)
         Write-HostMessage -Message "QueryType Element Quick Review: [ Type: $QueryType ] [ Channel: $Channel ] [ XPath: $XPathQuery ]"
-        if ($QueryElement.AddQueryTypeElement($NewQueryTypeElement) -eq 1) {
-            Write-HostMessage -err "There was a problem adding the QueryType element"
-        }
+        $QueryElement.AddQueryTypeElement($NewQueryTypeElement)
         $LocalQueryTypeCount += 1
     }
 }
 
+
+# === [ Still under development ] ===
 function Get-NormalizedQueryElement {
     param(
         [QueryElement]$QueryElement
@@ -531,6 +533,67 @@ function Write-QueryListXmlFile {
 
     Write-HostMessage -success -Message "QueryList successfully written to: $OutputPath"
     return
+}
+
+function Search-QueryElementIdentifier {
+
+    # This function should return a unique identifier of a QueryElement stored in the
+    # project folder named QueriesDB/
+    # This unique identifier is used to query the appropiate file under QueriesDB/ 
+    # that contains the XML QueryElement <Query>.
+    #
+    # A user can search for a QueryElement either by
+    #   - By intent: What's the overall goal of the query
+    #   - By author: Who wrote the query
+    #   - By events: What event or events are in the query
+    #   - By provider: What provider or providers are in the query
+    #   - *By technique: What Att&ck technique does the query is useful for detection
+    #
+    #   E.g., the following query can be found either by providing any of the following keywords based on the query method
+    #   - Intent: Network, IP, IPv6
+    #   - Author: Security-Experts-Community (GitHub profile name), wef-guidance (GitHub repo), t0x01 (GitHub Author), or aw350m33d[Anton Kutepov] (GitHub Author)
+    #   - Events: 50086 (Notice that Queries with * are not matched, nor the asterisk can be used to search for queries with it)
+    #   - Provider: Microsoft-Windows-Dhcp-Client/Operational (or just Microsoft-Windows-Dhcp-Client), and Microsoft-Windows-Dhcpv6-Client/Operational (or just Microsoft-Windows-Dhcpv6-Client)
+    #   - Technque: T1046 (Network Service Discovery), or T1557.002 (Adversary-in-the-Middle: ARP Cache Poisoning)
+    #
+    #   <Query Id="0">
+    #       <!-- (50086) IP conflict detection complete on interface [interface] for IP [IP] -->
+    #       <Select Path="Microsoft-Windows-Dhcp-Client/Operational">*[System[(EventID=50086)]]</Select>
+    #       <Select Path="Microsoft-Windows-Dhcpv6-Client/Operational">*</Select>
+    #   </Query>
+    #
+    # * Querying by technique can be very subjective.
+    #   Frequent review of this kind of tagging is important
+    
+    param(
+        [string]$Root = "$PSScriptRoot\QueriesDB",
+        [string]$Intent,
+        [string]$Author,
+        [int[]]$EventIDs,
+        [string[]]$Providers,
+        [string[]]$Techniques
+    )
+
+    $QueryMatches = @()
+
+    $MetaFiles = Get-ChildItem -Path $Root -Recurse -Filter "*.meta.json" -File
+
+    foreach ($MetaFile in $MetaFiles) {
+        $Meta = Get-Content $MetaFile.FullName | ConvertFrom-Json
+
+        $Match = $true
+        if ($Intent -and -not ($Meta.intent -contains $Intent)) { $Match = $false }
+        if ($Author -and -not ($Meta.author.name -like "*$Author*" -or $Meta.author.alias -like "*$Author*")) { $Match = $false }
+        if ($EventIDs -and -not ($Meta.events | Where-Object { $EventIDs -contains $_ })) { $Match = $false }
+        if ($Providers -and -not ($Meta.providers | Where-Object { $Providers -contains $_ })) { $Match = $false }
+        if ($Techniques -and -not ($Meta.mitre_attack | Where-Object { $Techniques -contains $_ })) { $Match = $false }
+
+        if ($Match) {
+            $QueryMatches += $MetaFile.FullName -replace '\.meta\.json$', '.query.xml'
+        }
+    }
+
+    return $QueryMatches
 }
 
 # Call Main
