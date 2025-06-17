@@ -2,9 +2,7 @@
     QueryName:      Account Management
     QueryIntent:    Identity and Access > User Account management
     Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
-    
     Attack:         T1098
-    
     Tag:            Access Control
     Tag:            Security Monitoring
     Tag:            Audit Policy

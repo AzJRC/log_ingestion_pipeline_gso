@@ -34,17 +34,21 @@ class QueryAuthor {
 }
 
 class QueryIntent {
+
+    # Network, System, Application and Services, Security and Auditing, Identity and Access 
+    static [string[]] $AllowedIntents = @('n', 's', 'as', 'sa', 'ia')   
     
     [ValidateNotNullOrEmpty()][string]$Intent
     [string]$SubIntent
     [string]$SubSubIntent
 
-    QueryIntent ($Intent, $SubIntent = "", $SubSubIntent = "") {
-        $this.Intent = $Intent                  # Any of: Network, System, Application and Services, Identity and Access, Security and Auditing 
-        $this.SubIntent = $SubIntent            # E.g. If intent is Network, a SubIntent could be SMB
-        $this.SubSubIntent = $SubSubIntent      # E.g. if SubIntent is DCHP, a SubSubIntent could be SMB Client, or File Sharing
+    QueryIntent ([string]$Intent, [string]$SubIntent = "", [string]$SubSubIntent = "") {
+        $this.Intent = $Intent                      # Any of the $AllowedIntents 
+        $this.SubIntent = $SubIntent                # E.g. If intent is Network, a SubIntent could be SMB
+        $this.SubSubIntent = $SubSubIntent          # E.g. if SubIntent is DCHP, a SubSubIntent could be SMB Client, or File Sharing
     }
 }
+
 
 class QueryMetadata {
     
@@ -58,16 +62,18 @@ class QueryMetadata {
     [list[string]]$Providers
     [list[string]]$Channels
     [list[QueryAuthor]]$QueryAuthors
+    [list[string]]$AttackMappings
     [list[string]]$Tags
 
     QueryMetadata(
         [string]$QueryName, 
         [QueryIntent]$QueryIntent, 
-        # [string]$QueryDescription = "", 
+        # [string]$QueryDescription = "",   
         [list[int]]$Events = [list[int]]::new(), 
         [list[string]]$Providers = [list[string]]::new(), 
         [list[string]]$Channels = [list[string]]::new(), 
         [list[QueryAuthor]]$QueryAuthors = [list[QueryAuthor]]::new(), 
+        [list[string]]$AttackMappings = [list[string]]::new(),
         [list[string]]$Tags = [list[string]]::new()
     ) {
         $this.QueryName = $QueryName
@@ -77,6 +83,7 @@ class QueryMetadata {
         $this.Providers = $Providers
         $this.Channels = $Channels
         $this.QueryAuthors = $QueryAuthors
+        $this.AttackMappings = $AttackMappings
         $this.Tags = $Tags
     }
 
@@ -106,6 +113,16 @@ function Build-MetadataQuery {
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 
     foreach ($XmlQueryFile in $XmlQueryFiles) {
+        $Metadata = [PSCustomObject]@{
+            QueryName   = $null
+            QueryIntent = $null
+            EventList   = @()
+            Providers   = @()
+            Channels    = @()
+            Authors     = @()
+            Attack      = @()
+            Tags        = @()
+        }
 
         # Remove .query.xml from the filename (Asummes filename structures {basename}.query.xml)
         $QueryBasename = ($XmlQueryFile.Name -split '.', 0, "SimpleMatch")[0]
@@ -113,58 +130,68 @@ function Build-MetadataQuery {
         $RawXmlFile = Get-Content -Path $XmlQueryFile.FullName
         [xml]$xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawXmlFile"
 
-        $EventList = [list[int]]::new()
-        $Channels = [list[string]]::new()
-        $Providers = [list[string]]::new()
-
         # Extract Channel and EventIDs from EACH Selector QueryType element
         foreach ($SelectItem in $xml.Query.Select) {
 
             # Extract-EventsFromXpathExpression deals with the operations of adding one or many events
             # from each Xpath expression
             $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
-            Extract-EventsFromXpathExpresion -XpathExpression $XPathExpression -EventList $EventList
+            $Metadata.EventList = Extract-EventsFromXpathExpresion -XpathExpression $XPathExpression
 
             # Only one channel per selector; therefore we use Add()
-            $Channels.Add($SelectItem.Attributes["Path"].Value)
+            $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
+            $Metadata.Channels += $SelectorChannelPath
         }
 
         # De-duplicate $EventIds and $Channels
         # [TODO]
         # ...
 
-        # Extract Provider from Channel if applicable 
-        Extract-ProvidersFromChannels -Channels $Channels -Providers $Providers
-
-        #Extract comment-block information: QueryName, QueryIntent, Author(s), Attack Mapping, and Tags
-        $Metadata = [PSCustomObject]@{
-            QueryName   = $null
-            QueryIntent = $null
-            Authors     = @()
-            Attack      = @()
-            Tags        = @()
+        # Extract Provider from Channel if applicable
+        if ($Metadata.Channels.Count -gt 0) {
+            $Metadata.Providers = Extract-ProvidersFromChannels -Channels $Metadata.Channels
         }
-
+        
+        #Extract comment-block information: QueryName, QueryIntent, Author(s), Attack Mapping, and Tags
         $InCommentBlock = $false
         foreach ($Line in $RawXmlFile) {
-            if $(-not ($InCommentBlock) -and ($Line -like "*<!--*")) { $InCommentBlock = $true; continue }
-            if $($InCommentBlock -and ($Line -like "*-->*")) { $InCommentBlock = $true; continue }
+            if (-not ($InCommentBlock) -and ($Line -like "*<!--*")) { $InCommentBlock = $true; continue }
+            if ($InCommentBlock -and ($Line -like "*-->*")) { $InCommentBlock = $true; continue }
             if (-not ($InCommentBlock)) { continue }
 
             $Key, $Value = ($Line -split ':').Trim()
 
             # Keys always just one word (UpperCammelCase like QueryName or QueryIntent)   
             switch ($Key.ToLower()) {
-                'queryname' { $Metadata.QueryName = $Value }
-                'queryintent' { $Metadata.QueryIntent = Parse-RawQueryName -RawQueryName $Value }
-                'author' { $Metadata.Author = Parse-RawAuthor -RawAuthor $Value }
-                'attack' { $Metadata.Attack += $Value }
-                'tag' { $Metadata.Tags += $Value }
+                'queryname' { $Metadata.QueryName = $Value.toLower() -replace ('[ ]+', '_'); break }
+                'queryintent' { $Metadata.QueryIntent = Parse-RawQueryIntent -RawQueryIntent $Value; break }
+                'author' { $Metadata.Authors += Parse-RawQueryAuthor -RawQueryAuthor $Value; break }
+                'attack' { $Metadata.Attack += $Value; break }
+                'tag' { $Metadata.Tags += $Value; break }
             }
         }
-    }
-}
 
+        $Metadata
+
+        # Write QueryMetadata Object
+        $QueryMetadata = [QueryMetadata]::new(
+            $Metadata.QueryName, 
+            $Metadata.QueryIntent, 
+            $Metadata.EventList, 
+            $Metadata.Providers, 
+            $Metadata.Channels, 
+            $Metadata.Authors,
+            $Metadata.Attack,
+            $Metadata.Tags
+        )
+
+
+        # Write JSON file
+        $QueryMetadata
+    }
+
+    return
+}
 
 $SINGLE_EVENT_REGEX = '[\s(]?EventID=(?<EventId>\d+)[\s)]?'
 function Extract-EventsFromXpathExpresion {
@@ -172,24 +199,21 @@ function Extract-EventsFromXpathExpresion {
     param(
         [Parameter(Mandatory = $true)]
         [string]
-        $XpathExpression,
-
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyCollection()]
-        [list[int]]
-        $EventList
+        $XpathExpression
     )
 
+    $EventList = [list[int]]::new()
+
     # Extract Event Ids from XPath Expression
-    $matches = [regex]::Matches($XpathExpression, $SINGLE_EVENT_REGEX)
-    foreach ($match in $matches) {
-        $eventIdStr = $match.Groups["EventId"].Value
+    $EventIdMatches = [regex]::Matches($XpathExpression, $SINGLE_EVENT_REGEX)
+    foreach ($Match in $EventIdMatches) {
+        $eventIdStr = $Match.Groups["EventId"].Value
         if ([int]::TryParse($eventIdStr, [ref]$null)) {
             $EventList.Add([int]$eventIdStr)
         }
     }
 
-    return
+    return $EventList
 }
 
 function Extract-ProvidersFromChannels {
@@ -197,21 +221,19 @@ function Extract-ProvidersFromChannels {
     param (
         [Parameter(Mandatory = $true)]
         [list[string]]
-        $Channels,
-
-        [Parameter(Mandatory = $true)]
-        [list[string]]
-        [AllowEmptyCollection()]
-        $Providers
+        $Channels
     )
+
+    $Providers = [list[int]]::new()
 
     Foreach ($Channel in $Channels) {
         $Provider = ($Channel -split '/')[0]    # Assumes a structure {provider_name}/{channel_stream_name}
         if ($Provider -ne $Channel) { $Providers.Add($Provider) } 
     }
 
-    return
+    return $Providers 
 }
+
 
 function Parse-RawQueryIntent {
     param (
@@ -220,19 +242,52 @@ function Parse-RawQueryIntent {
         $RawQueryIntent
     )
     # QueryIntent: Identity and Access > SubIntent[Optional] > SubSubIntent[Optional]
-    # [TODO]
+    $IntentParts = $RawQueryIntent -split '>' | ForEach-Object { $_.Trim().ToLower() -replace ('[ ]+', '_') }
 
+    # Ensure the array has exactly 3 elements (More than 3 elements are ignored)
+    while ($IntentParts.Count -lt 3) {
+        $IntentParts += ""
+    }
+
+    $Intent = $IntentParts[0]
+    $SubIntent = $IntentParts[1]
+    $SubSubIntent = $IntentParts[2]
+
+    # Intent is mandatory
+    if (-not $Intent) {
+        $Alias = "Anonymous"
+        Write-Host "[*] Intent of the query wasn't found." -ForegroundColor gray
+
+        while ($true) {
+            $IntentInput = Read-Host "Type the intent of the query (`n`, `s`, `as`, `sa`, `ia`)"
+            if ($IntentInput.ToLower() -in [QueryIntent]::AllowedIntents) {
+                $Intent = $IntentInput
+                break
+            }
+            else {
+                Write-Host "[!] Invalid intent. Valid options are: $([QueryIntent]::AllowedIntents -join ', ')" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    try {
+        return [QueryIntent]::new($Intent, $SubIntent, $SubSubIntent)
+    }
+    catch {
+        Write-Error "[-] Failed to create QueryAuthor object. Check input format. Input: '$RawQueryName'"
+        return $null
+    }
 }
 
-function Parse-RawAuthor {
+function Parse-RawQueryAuthor {
     param (
         [Parameter(Mandatory = $true)]
         [string]
-        $RawAuthor
+        $RawQueryAuthor
     )
 
     # Author: John Doe, JohnDoe123, WefManagementTool
-    $AuthorParts = $RawQueryName -split ',' | ForEach-Object { $_.Trim() }
+    $AuthorParts = $RawQueryAuthor -split ',' | ForEach-Object { $_.Trim() }
 
     # Ensure the array has exactly 3 elements
     while ($AuthorParts.Count -lt 3) {
@@ -243,7 +298,11 @@ function Parse-RawAuthor {
     $Alias = $AuthorParts[1]
     $Project = $AuthorParts[2]
 
-    # [TODO] What happen if all authorship data isn't provided?
+    # If no authorship data was provided default $Alias to Anonymous
+    if (-not $Name -and -not $Alias -and -not $Project) {
+        $Alias = "Anonymous"
+        Write-Host "[*] Authorship data wasn't found. Default alias set to 'Anonymous'" -ForegroundColor gray
+    }
 
     try {
         return [QueryAuthor]::new($Name, $Alias, $Project)
