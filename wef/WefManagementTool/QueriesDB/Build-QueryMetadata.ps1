@@ -171,6 +171,7 @@ function Build-MetadataQuery {
         )
 
         # Write to JSON file
+
         $OutputJsonPath = $XmlQueryFile.FullName -replace ("query.xml", "meta.json")
         Write-QueryMetadataFile -QueryMetadata $QueryMetadata -OutputFile $OutputJsonPath
     }
