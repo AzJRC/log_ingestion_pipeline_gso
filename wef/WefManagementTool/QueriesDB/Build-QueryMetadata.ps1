@@ -88,9 +88,7 @@ class QueryMetadata {
         $this.AttackMappings = $AttackMappings
         $this.Tags = $Tags
     }
-
 }
-
 
 function Build-MetadataQuery {
     param(
