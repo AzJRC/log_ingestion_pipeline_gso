@@ -29,6 +29,7 @@ A well deployed WEF architecture will load balance event forwarding in enough WE
 
 Windows Event Forwarding is often configured in Windows Domains, as this makes the implementation more straighforward and simple. Follow the steps to set up WEF successfully.
 
+
 1. **Determine the number of WECs you will need in your environment**
 
 
