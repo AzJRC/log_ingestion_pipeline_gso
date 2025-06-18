@@ -21,6 +21,8 @@ MetadataSchema
     "tags": ["tag_1", "tag_2", "tag_3", ...]                            # Related terms to the query's intent
 }#>
 
+# [NOTE] Program with PowerShell 7.5.1 works
+
 class QueryAuthor {
     [ValidateNotNullOrEmpty()][string]$AuthorName
     [ValidateNotNullOrEmpty()][string]$AuthorAlias
@@ -124,9 +126,6 @@ function Build-MetadataQuery {
             Tags        = @()
         }
 
-        # Remove .query.xml from the filename (Asummes filename structures {basename}.query.xml)
-        $QueryBasename = ($XmlQueryFile.Name -split '.', 0, "SimpleMatch")[0]
-
         $RawXmlFile = Get-Content -Path $XmlQueryFile.FullName
         [xml]$xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawXmlFile"
 
@@ -171,8 +170,6 @@ function Build-MetadataQuery {
             }
         }
 
-        $Metadata
-
         # Write QueryMetadata Object
         $QueryMetadata = [QueryMetadata]::new(
             $Metadata.QueryName, 
@@ -185,9 +182,9 @@ function Build-MetadataQuery {
             $Metadata.Tags
         )
 
-
         # Write JSON file
-        $QueryMetadata
+        $OutputJsonPath = $XmlQueryFile.FullName -replace ("query.xml", "meta.json")
+        Write-QueryMetadataFile -QueryMetadata $QueryMetadata -OutputFile $OutputJsonPath
     }
 
     return
@@ -255,7 +252,6 @@ function Parse-RawQueryIntent {
 
     # Intent is mandatory
     if (-not $Intent) {
-        $Alias = "Anonymous"
         Write-Host "[*] Intent of the query wasn't found." -ForegroundColor gray
 
         while ($true) {
@@ -311,6 +307,20 @@ function Parse-RawQueryAuthor {
         Write-Error "Failed to create QueryAuthor object. Check input format. Input: '$RawQueryName'"
         return $null
     }
+}
+
+function Write-QueryMetadataFile {
+    param (
+        [Parameter(Mandatory = $true)]
+        [QueryMetadata]
+        $QueryMetadata,
+
+        [Parameter(Mandatory = $true)]
+        [string]
+        $OutputFile
+    )
+
+    ConvertTo-Json -InputObject $QueryMetadata -Compress | Out-File $OutputFile
 }
 
 # Run Main
