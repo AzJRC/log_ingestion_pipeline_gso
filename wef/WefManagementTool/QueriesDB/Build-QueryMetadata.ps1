@@ -105,53 +105,38 @@ function Build-MetadataQuery {
         $RootDatabase = "$PSScriptRoot\..\QueriesDB"
     )
 
-    # [TODO] If $XmlQueryFilePath is provided, Build only that file.
-    
-
-    # If not $XmlQueryFilePath, search for any {base_name}.query.xml without corresponding {base_name}.meta.json.
-    # Then, build the .meta.json files for those xml queries.
-    # All XML queries are assumed to be located in $RootDatabase
-
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 
     foreach ($XmlQueryFile in $XmlQueryFiles) {
-        $Metadata = [PSCustomObject]@{
-            QueryName   = $null
-            QueryIntent = $null
-            EventList   = @()
-            Providers   = @()
-            Channels    = @()
-            Authors     = @()
-            Attack      = @()
-            Tags        = @()
-        }
+
+        # Strongly typed variables
+        [string]$QueryName = $null
+        [QueryIntent]$QueryIntent = $null
+        [List[int]]$EventList = [List[int]]::new()
+        [List[string]]$Providers = [List[string]]::new()
+        [List[string]]$Channels = [List[string]]::new()
+        [List[QueryAuthor]]$Authors = [List[QueryAuthor]]::new()
+        [List[string]]$Attack = [List[string]]::new()
+        [List[string]]$Tags = [List[string]]::new()
 
         $RawXmlFile = Get-Content -Path $XmlQueryFile.FullName
         [xml]$xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawXmlFile"
 
         # Extract Channel and EventIDs from EACH Selector QueryType element
         foreach ($SelectItem in $xml.Query.Select) {
-
-            # Extract-EventsFromXpathExpression deals with the operations of adding one or many events
-            # from each Xpath expression
             $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
-            $Metadata.EventList = Extract-EventsFromXpathExpresion -XpathExpression $XPathExpression
+            $EventList = Extract-EventsFromXpathExpresion -XpathExpression $XPathExpression
 
-            # Only one channel per selector; therefore we use Add()
             $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
-            $Metadata.Channels += $SelectorChannelPath
+            $Channels.Add($SelectorChannelPath)
         }
-
-        # De-duplicate $EventIds and $Channels
-        # [TODO]
-        # ...
 
         # Extract Provider from Channel if applicable
-        if ($Metadata.Channels.Count -gt 0) {
-            $Metadata.Providers = Extract-ProvidersFromChannels -Channels $Metadata.Channels
+        if ($Channels.Count -gt 0) {
+            $Providers = Extract-ProvidersFromChannels -Channels $Channels
         }
-        
-        #Extract comment-block information: QueryName, QueryIntent, Author(s), Attack Mapping, and Tags
+
+        # Extract comment-block metadata
         $InCommentBlock = $false
         foreach ($Line in $RawXmlFile) {
             if (-not ($InCommentBlock) -and ($Line -like "*<!--*")) { $InCommentBlock = $true; continue }
@@ -160,29 +145,34 @@ function Build-MetadataQuery {
 
             $Key, $Value = ($Line -split ':').Trim()
 
-            # Keys always just one word (UpperCammelCase like QueryName or QueryIntent)   
             switch ($Key.ToLower()) {
-                'queryname' { $Metadata.QueryName = $Value.toLower() -replace ('[ ]+', '_'); break }
-                'queryintent' { $Metadata.QueryIntent = Parse-RawQueryIntent -RawQueryIntent $Value; break }
-                'author' { $Metadata.Authors += Parse-RawQueryAuthor -RawQueryAuthor $Value; break }
-                'attack' { $Metadata.Attack += $Value; break }
-                'tag' { $Metadata.Tags += $Value; break }
+                'queryname' { $QueryName = $Value.ToLower() -replace ('[ ]+', '_'); break }
+                'queryintent' { $QueryIntent = Parse-RawQueryIntent -RawQueryIntent $Value; break }
+                'author' { 
+                    $authorObj = Parse-RawQueryAuthor -RawQueryAuthor $Value
+                    if ($authorObj -is [QueryAuthor]) {
+                        $Authors.Add($authorObj)
+                    }
+                    break
+                }
+                'attack' { $Attack.Add($Value); break }
+                'tag' { $Tags.Add($Value); break }
             }
         }
 
-        # Write QueryMetadata Object
+        # Build the final strongly-typed QueryMetadata object
         $QueryMetadata = [QueryMetadata]::new(
-            $Metadata.QueryName, 
-            $Metadata.QueryIntent, 
-            $Metadata.EventList, 
-            $Metadata.Providers, 
-            $Metadata.Channels, 
-            $Metadata.Authors,
-            $Metadata.Attack,
-            $Metadata.Tags
+            $QueryName, 
+            $QueryIntent, 
+            $EventList, 
+            $Providers, 
+            $Channels, 
+            $Authors,
+            $Attack,
+            $Tags
         )
 
-        # Write JSON file
+        # Write to JSON file
         $OutputJsonPath = $XmlQueryFile.FullName -replace ("query.xml", "meta.json")
         Write-QueryMetadataFile -QueryMetadata $QueryMetadata -OutputFile $OutputJsonPath
     }
