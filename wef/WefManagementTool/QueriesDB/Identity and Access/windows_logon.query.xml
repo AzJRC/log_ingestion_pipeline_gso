@@ -1,0 +1,21 @@
+<!--
+    QueryName:      Windows Logon
+    QueryIntent:    Identity and Access > Logon
+    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
+    Attack:         T1078
+    Tag:            Security Monitoring
+    Tag:            Access Control
+    Tag:            Audit Policy
+-->
+<Query Id="0">
+    <!--
+        (4624) Successful logon
+        (4625) Failed logon
+        (4648) Logon with explicit credentials
+        (4634) Logoff
+        (4778) Session reconnected
+        (4779) Session disconnected
+    -->
+    <Select Path="Security">*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4634
+        or EventID=4778 or EventID=4779)]]</Select>
+</Query>

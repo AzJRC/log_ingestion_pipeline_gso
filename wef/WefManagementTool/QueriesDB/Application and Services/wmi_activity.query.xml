@@ -1,0 +1,16 @@
+<!--
+    QueryName:      WMI Activity
+    QueryIntent:    Application and Services > Script Execution > WMI
+    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
+    Attack:         T1047
+    Tag:            Execution
+    Tag:            Lateral Movement
+-->
+<Query Id="0">
+    <!--
+        (5857-5861) WMI Method and Consumer Activity
+    -->
+    <Select Path="Microsoft-Windows-WMI-Activity/Operational">*[System[
+        (EventID=5857 or EventID=5858 or EventID=5859 or EventID=5860 or EventID=5861)
+        ]]</Select>
+</Query>

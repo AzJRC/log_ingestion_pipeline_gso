@@ -209,7 +209,7 @@ function Extract-ProvidersFromChannels {
         $Channels
     )
 
-    $Providers = [list[int]]::new()
+    $Providers = [list[string]]::new()
 
     Foreach ($Channel in $Channels) {
         $Provider = ($Channel -split '/')[0]    # Assumes a structure {provider_name}/{channel_stream_name}
