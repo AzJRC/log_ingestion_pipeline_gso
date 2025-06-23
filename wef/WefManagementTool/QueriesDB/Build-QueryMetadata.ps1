@@ -271,7 +271,7 @@ function Parse-RawQueryAuthor {
     )
 
     # Author: John Doe, JohnDoe123, WefManagementTool
-    $AuthorParts = $RawQueryAuthor -split ',' | ForEach-Object { $_.Trim() }
+    $AuthorParts = $RawQueryAuthor -split ',' | ForEach-Object { $_.Trim().ToLower() -replace ('[ ]+', '_') }
 
     # Ensure the array has exactly 3 elements
     while ($AuthorParts.Count -lt 3) {
