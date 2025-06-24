@@ -185,8 +185,10 @@ function Write-XmlQueryFile {
                 #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
                 # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
                 # Query blocks are also tagged with author name. E.g. 
-                $NewQueryElement = [QueryElement]::new($QueryElementId)
-                Search-QueryElementIdentifier -QueryElementId ($QueryList.QueryElements.Count + 1) -QueryElement $NewQueryElement
+                $SelectedQueries = @()
+                Search-QueryElementIdentifier | ForEach-Object {
+                    $SelectedQueries += $_
+                }
                 Write-HostMessage -success -Message "QueryElement added successfully"
                 break
             }
@@ -567,10 +569,6 @@ function Search-QueryElementIdentifier {
     # * Querying by technique can be very subjective.
     #   Frequent review of this kind of tagging is important
     
-    param(
-        [int]$QueryElementId,
-        [QueryElement]$QueryElement
-    )
 
     # Search parameters
     [list[string]]$QueryIntents = [List[string]]::new()
@@ -712,22 +710,94 @@ function Search-QueryElementIdentifier {
     $MetaFiles = Get-ChildItem -Path $Root -Recurse -Filter "*.meta.json" -File
     foreach ($MetaFile in $MetaFiles) {
         $Meta = Get-Content $MetaFile.FullName | ConvertFrom-Json
-        $Match = $true
+        
+        # By default, no matching queries
+        $Match = 0  # Match index - The higher, the more relevant the query
 
-        if ($QueryIntents.Length -gt 0 -and -not ($QueryIntents -contains $Meta.QueryIntent.Intent -or $QueryIntents -contains $Meta.QueryIntent.SubIntent)) { $Match = $false }
-        if ($Events.Length -gt 0 -and -not ($Meta.Events | Where-Object { [int]$_ -in $Events })) { $Match = $false }
-        if ($Providers.Length -gt 0 -and -not ($Meta.Providers | Where-Object { $Providers -contains $_ })) { $Match = $false }
-        if ($Channels.Length -gt 0 -and -not ($Meta.Channels | Where-Object { $Channels -contains $_ })) { $Match = $false }
-        if ($Authors.Length -gt 0 -and -not ($Meta.QueryAuthors.AuthorName -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorAlias -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorProject -like "*$($Authors | ForEach-Object ( $_ ))*")) { $Match = $false }
-        if ($Techniques.Length -gt 0 -and -not ($Meta.AttackMappings | Where-Object { $_ -in $Techniques })) { $Match = $false }
-        if ($Tags.Length -gt 0 -and -not ($Meta.Tags | Where-Object { $_ -in $Tags })) { $Match = $false }
+        # Matching aspects (Intent, Event relevance, providers, channels, authors, att&ck techniques, and provided tags)
+        if ($QueryIntents.Length -gt 0 -and -not ($QueryIntents -contains $Meta.QueryIntent.Intent -or $QueryIntents -contains $Meta.QueryIntent.SubIntent -or $QueryIntents -contains $Meta.QueryIntent.SubSubIntent)) { $Match = 0 } elseif ($QueryIntents.Length -gt 0) { $Match += 1 }
+        if ($Events.Length -gt 0 -and -not ($Meta.Events | Where-Object { [int]$_ -in $Events })) { $Match = 0 } elseif ($Events.Length -gt 0) { $Match += 1 }
+        if ($Providers.Length -gt 0 -and -not ($Meta.Providers | Where-Object { $Providers -contains $_ })) { $Match = 0 } elseif ($Providers.Length -gt 0) { $Match += 1 }
+        if ($Channels.Length -gt 0 -and -not ($Meta.Channels | Where-Object { $Channels -contains $_ })) { $Match = 0 } elseif ($Channels.Length -gt 0) { $Match += 1 }
+        if ($Authors.Length -gt 0 -and -not ($Meta.QueryAuthors.AuthorName -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorAlias -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorProject -like "*$($Authors | ForEach-Object ( $_ ))*")) { $Match = 0 } elseif ($Authors.Length -gt 0) { $Match += 1 }
+        if ($Techniques.Length -gt 0 -and -not ($Meta.AttackMappings | Where-Object { $_ -in $Techniques })) { $Match = 0 } elseif ($Techniques.Length -gt 0) { $Match += 1 }
+        if ($Tags.Length -gt 0 -and -not ($Meta.Tags | Where-Object { $_ -in $Tags })) { $Match = 0 } elseif ($Tags.Length -gt 0) { $Match += 1 }
 
-        if ($Match) {
-            $QueryMatches += $MetaFile.FullName -replace '\.meta\.json$', '.query.xml'
+        # If matched, add to query matches
+        if ($Match -gt 0) {
+            $QueryMatches += @{ $Meta.QueryName = $MetaFile; MatchIndex = $Match }
         }
     }
 
-    return $QueryMatches
+    if ($QueryMatches.Count -eq 0) {
+        Write-HostMessage -warning "No matching queries found"
+        return $null
+    }
+
+    # Order matches by relevance
+    $QueryMatches = $QueryMatches | Sort-Object -Property MatchIndex -Descending
+
+    # Store names of Query files for easier identification
+    $QueryNames = [list[string]]::new()
+    $QueryMatches | ForEach-Object {
+        foreach ($key in $_.Keys) {
+            if ($key -ne "MatchIndex") {
+                # Do not add the key name itself
+                $QueryNames.Add($key)
+            }
+        }
+    }
+
+    # Inspect QueryMatches, 5 at a time. Show first the most relevant matches
+    $Window = 5
+    $Iterations = [math]::ceiling($QueryNames.Count / 5)
+    $SelectedQueries = @()
+    for ($StartIdx = 0; $StartIdx -lt $Iterations; $StartIdx += $Window ) {
+
+        while ($true) {
+
+            for ($i = 0; $i -lt $Window; $i += 1) {
+                if (($StartIdx + $i) -ge $QueryNames.Count) { break }
+                Write-HostMenu -Message "Select the matched queries you want to import"
+                Write-BlankLine
+                Write-HostMenuOption -OptionNumber ($i + 1) -Message $QueryNames[$StartIdx + $i]
+            }
+
+            while ($true) {
+                $Option = Read-HostInput -Message "Enter option number [Type !I:{Number} to inspect a query or 'q' to exit]" -Prompt ">" -AllowString
+                break
+            }
+            if ($Option.ToUpper() -eq 'Q') { break }
+
+            #Convert to number
+            [int]$OptionNumber = 0
+            $Success = [int32]::TryParse($Option, [ref]$OptionNumber)   
+            
+            if ($Success) {
+                if ($OptionNumber -gt $i -or $OptionNumber -le 0) { Write-HostMessage -err "Invalid option"; continue }
+
+                if ($Option -match '^!I:[1-5]$') { 
+                    # [TODO] Inspect Query
+                    # ...
+                    Write-HostMessage -warning "[TODO] Feature not ready"
+                    continue
+                }
+
+                $SelectedQueryName = $QueryNames[$StartIdx + $OptionNumber - 1]
+                $SelectedQueries += $QueryMatches[$StartIdx + $OptionNumber - 1][$SelectedQueryName]    # OptionNumber is relative to the StartIndex of the menu page
+                
+                $lastQuery = $SelectedQueries[-1]
+                Write-HostMessage -success "Query '$SelectedQueryName' added to the import list"
+                continue
+            }
+
+            Write-HostMessage -err "Something went wrong when validating your option"
+            continue
+        }
+    }
+
+    # Return list of queries to import
+    return $SelectedQueries
 }
 
 # Call Main
