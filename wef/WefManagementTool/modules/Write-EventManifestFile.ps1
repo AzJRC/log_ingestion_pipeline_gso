@@ -17,7 +17,7 @@ class ChannelElement {
         $this.ChannelType = $ChannelType
         $this.ChannelStatus = $ChannelStatus
         $this.ChannelChidName = if ( $null -eq $ChannelChidName ) { $this.DeriveChannelChidName($ChannelName) } else { $ChannelChidName }
-        $this.ChannelSymbolName = if ( $null -eq $ChannelSymbolName ) { $this.DeriveChannelSymbolName( "$env:computername $ChannelName" ) } else { $ChannelSymbolName }
+        $this.ChannelSymbolName = if ( $null -eq $ChannelSymbolName ) { $this.DeriveChannelSymbolName($ChannelName) } else { $ChannelSymbolName }
     }
 
     # Pseudo-Private methods
@@ -26,8 +26,10 @@ class ChannelElement {
         return $ChannelName.Replace(' ', '')
     }
 
-    hidden [string] DeriveChannelSymbolName($ChannelName) {
-        $SymbolName = $ChannelName.ToUpper() -replace '[^A-Z0-9]', '_'
+
+    hidden [string] DeriveChannelSymbolName($ProviderName) {
+        $HostName = [System.Net.Dns]::GetHostName()
+        $SymbolName = ("$HostName $ProviderName").ToUpper() -replace '[^A-Z0-9]', '_'
         return $SymbolName
     }
 }
@@ -55,15 +57,15 @@ class ProviderElement {
     ProviderElement ($ProviderName, $ProviderGUID = $null, $ProviderSymbolName = $null, $DllOutputPath = $null) {
         $this.ProviderName = $ProviderName
         $this.ProviderGUID = if ($null -eq $ProviderGUID) { "{$((New-Guid).Guid)}" } else { "{$ProviderGuid}" }
-        $this.ProviderSymbolName = if ( $null -eq $ProviderSymbolName) { $this.DeriveProviderSymbolName("$env:computername $ProviderName") } else { $ProviderSymbolName }
+        $this.ProviderSymbolName = if ( $null -eq $ProviderSymbolName) { $this.DeriveProviderSymbolName($ProviderName) } else { $ProviderSymbolName }
         $this.ResourceFileName = if ($null -eq $DllOutputPath) { $this.GetDllPath() } else { $DllOutputPath }
         $this.MessageFileName = if ($null -eq $DllOutputPath) { $this.GetDllPath() } else { $DllOutputPath }
         $this.ParameterFileName = if ($null -eq $DllOutputPath) { $this.GetDllPath() } else { $DllOutputPath }
     }
 
-    # Pseudo-Private methods
     hidden [string] DeriveProviderSymbolName($ProviderName) {
-        $SymbolName = $ProviderName.ToUpper() -replace '[^A-Z0-9]', '_'
+        $HostName = [System.Net.Dns]::GetHostName()
+        $SymbolName = ("$HostName $ProviderName").ToUpper() -replace '[^A-Z0-9]', '_'
         return $SymbolName
     }
 
@@ -100,8 +102,15 @@ function Write-EventManifestFile {
             HelpMessage = "Manifest file output path.")]
         [Alias("Man")]
         [string]
-        $ManifestFileOutputPath = "$PSScriptRoot\..\Files\$([ProviderElement]::DLL_FILENAME).man"
+        $ManifestFileOutputPath
     )
+
+    if (-not $ManifestFileOutputPath) {
+        $BasePath = Join-Path -Path $PSScriptRoot -ChildPath ".."
+        $ResolvedBasePath = [System.IO.Path]::GetFullPath($BasePath)
+        $FileName = ([ProviderElement]::DLL_FILENAME) + ".man"
+        $ManifestFileOutputPath = Join-Path -Path $ResolvedBasePath -ChildPath "Files\$FileName"
+    }
 
     # Create $OutputPath if not exists
     if (-not (Test-Path $ManifestFileOutputPath)) {
@@ -274,20 +283,22 @@ function Write-InstrumentationManifestXmlFile {
         return 1
     }
 
-    $XmlWriter = New-Object System.XMl.XmlTextWriter($OutputPath, $null)
-    $xmlWriter.Formatting = "Indented"
-    $xmlWriter.Indentation = "4"
+    $settings = New-Object System.Xml.XmlWriterSettings
+    $settings.Indent = $true
+    $settings.Encoding = [System.Text.Encoding]::UTF8
+
+    $xmlWriter = [System.Xml.XmlWriter]::Create($OutputPath, $settings)
 
     $xmlWriter.WriteStartDocument()
 
     # Begin Instrumentation Manifest
-    $xmlWriter.WriteStartElement("instrumentationManifest")
-    $xmlWriter.WriteAttributeString("xsi:schemaLocation", "http://schemas.microsoft.com/win/2004/08/events eventman.xsd")
-    $xmlWriter.WriteAttributeString("xmlns", "http://schemas.microsoft.com/win/2004/08/events")
-    $xmlWriter.WriteAttributeString("xmlns:win", "http://manifests.microsoft.com/win/2004/08/windows/events")
-    $xmlWriter.WriteAttributeString("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-    $xmlWriter.WriteAttributeString("xmlns:xs", "http://www.w3.org/2001/XMLSchema")
-    $xmlWriter.WriteAttributeString("xmlns:trace", "http://schemas.microsoft.com/win/2004/08/events/trace")
+    $xmlWriter.WriteStartElement("instrumentationManifest", "http://schemas.microsoft.com/win/2004/08/events")
+
+    $xmlWriter.WriteAttributeString("xmlns", "xs", $null, "http://www.w3.org/2001/XMLSchema")
+    $xmlWriter.WriteAttributeString("xmlns", "xsi", $null, "http://www.w3.org/2001/XMLSchema-instance")
+    $xmlWriter.WriteAttributeString("xmlns", "win", $null, "http://manifests.microsoft.com/win/2004/08/windows/events")
+    $xmlWriter.WriteAttributeString("xmlns", "trace", $null, "http://schemas.microsoft.com/win/2004/08/events/trace")
+    $xmlWriter.WriteAttributeString("xsi", "schemaLocation", "http://www.w3.org/2001/XMLSchema-instance", "http://schemas.microsoft.com/win/2004/08/events eventman.xsd")
 
     # Create Instrumentation, Events and Provider Elements
     $xmlWriter.WriteStartElement("instrumentation")
@@ -306,7 +317,6 @@ function Write-InstrumentationManifestXmlFile {
         $xmlWriter.WriteStartElement("channels")
         foreach ($Channel in $Provider.Channels) {
             # Add Channels
-            
             $xmlWriter.WriteStartElement("channel")
             $xmlWriter.WriteAttributeString("name", $Channel.ChannelName)
             $xmlWriter.WriteAttributeString("chid", $Channel.ChannelChidName)
@@ -323,11 +333,9 @@ function Write-InstrumentationManifestXmlFile {
 
     $XmlWriter.WriteEndElement()    # </events>
     $XmlWriter.WriteEndElement()    # </instrumentation>
-
-    # Close Instrumentation Manifest
     $xmlWriter.WriteEndElement()    # </instrumentationManifest>
     $xmlWriter.WriteEndDocument()
-    $xmlWriter.Finalize
+
     $xmlWriter.Flush()
     $xmlWriter.Close()
 
