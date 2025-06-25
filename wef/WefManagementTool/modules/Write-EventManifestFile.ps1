@@ -68,8 +68,24 @@ class ProviderElement {
     }
 
     hidden [string] GetDllPath() {
-        return $(Join-Path -Path "$([ProviderElement]::DLL_PARENT_PATH)" -ChildPath "$([ProviderElement]::DLL_FILENAME).dll")
+        $Path = [ProviderElement]::DLL_PARENT_PATH
+        $Filename = [ProviderElement]::DLL_FILENAME + ".dll"
+
+        # Detect if running on Linux (For WSL)
+        $System = [System.Environment]::OSVersion.Platform
+
+        if ($System -eq 'Win32NT') {
+            # Use Join-Path normally on Windows
+            $DllPath = Join-Path -Path $Path -ChildPath $Filename
+        } else {
+            # Just build the string manually (avoid Join-Path)
+            $Path = $Path.TrimEnd('\', '/')
+            $DllPath = "$Path\$Filename"
+        }
+
+        return $DllPath
     }
+
 }
 
 # Load dependencies
