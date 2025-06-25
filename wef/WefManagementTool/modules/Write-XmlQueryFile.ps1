@@ -185,10 +185,7 @@ function Write-XmlQueryFile {
                 #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
                 # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
                 # Query blocks are also tagged with author name. E.g. 
-                $SelectedQueries = @()
-                Search-QueryElementIdentifier | ForEach-Object {
-                    $SelectedQueries += $_
-                }
+                $Result = Search-QueryElementIdentifier
                 Write-HostMessage -success -Message "QueryElement added successfully"
                 break
             }
@@ -725,7 +722,11 @@ function Search-QueryElementIdentifier {
 
         # If matched, add to query matches
         if ($Match -gt 0) {
-            $QueryMatches += @{ $Meta.QueryName = $MetaFile; MatchIndex = $Match }
+            $QueryMatches += [PSCustomObject]@{
+                QueryName  = $Meta.QueryName
+                MetaFile   = $MetaFile
+                MatchIndex = $Match
+            }
         }
     }
 
@@ -737,37 +738,32 @@ function Search-QueryElementIdentifier {
     # Order matches by relevance
     $QueryMatches = $QueryMatches | Sort-Object -Property MatchIndex -Descending
 
-    # Store names of Query files for easier identification
-    $QueryNames = [list[string]]::new()
-    $QueryMatches | ForEach-Object {
-        foreach ($key in $_.Keys) {
-            if ($key -ne "MatchIndex") {
-                # Do not add the key name itself
-                $QueryNames.Add($key)
-            }
-        }
-    }
-
     # Inspect QueryMatches, 5 at a time. Show first the most relevant matches
     $Window = 5
-    $Iterations = [math]::ceiling($QueryNames.Count / 5)
+    $Iterations = [math]::ceiling($QueryMatches.Count / 5)
     $SelectedQueries = @()
     for ($StartIdx = 0; $StartIdx -lt $Iterations; $StartIdx += $Window ) {
 
         while ($true) {
 
+            Write-HostMenu -Message "Select the matched queries you want to import"
+            Write-BlankLine
+
             for ($i = 0; $i -lt $Window; $i += 1) {
-                if (($StartIdx + $i) -ge $QueryNames.Count) { break }
-                Write-HostMenu -Message "Select the matched queries you want to import"
-                Write-BlankLine
-                Write-HostMenuOption -OptionNumber ($i + 1) -Message $QueryNames[$StartIdx + $i]
+                if (($StartIdx + $i) -ge $QueryMatches.Count) { break }
+                Write-HostMenuOption -OptionNumber ($i + 1) -Message $QueryMatches[$StartIdx + $i].QueryName
             }
 
-            while ($true) {
-                $Option = Read-HostInput -Message "Enter option number [Type !I:{Number} to inspect a query or 'q' to exit]" -Prompt ">" -AllowString
-                break
-            }
+            $Option = Read-HostInput -Message "Enter option number [Type !I:{Number} to inspect a query or 'q' to exit]" -Prompt ">" -AllowString
             if ($Option.ToUpper() -eq 'Q') { break }
+
+            # Inspect query
+            if ($Option -match '^!I:[1-5]$') { 
+                # [TODO] Inspect Query
+                # ...
+                Write-HostMessage -warning "[TODO] Feature not ready"
+                continue
+            }
 
             #Convert to number
             [int]$OptionNumber = 0
@@ -775,19 +771,11 @@ function Search-QueryElementIdentifier {
             
             if ($Success) {
                 if ($OptionNumber -gt $i -or $OptionNumber -le 0) { Write-HostMessage -err "Invalid option"; continue }
-
-                if ($Option -match '^!I:[1-5]$') { 
-                    # [TODO] Inspect Query
-                    # ...
-                    Write-HostMessage -warning "[TODO] Feature not ready"
-                    continue
-                }
-
-                $SelectedQueryName = $QueryNames[$StartIdx + $OptionNumber - 1]
-                $SelectedQueries += $QueryMatches[$StartIdx + $OptionNumber - 1][$SelectedQueryName]    # OptionNumber is relative to the StartIndex of the menu page
                 
-                $lastQuery = $SelectedQueries[-1]
-                Write-HostMessage -success "Query '$SelectedQueryName' added to the import list"
+                $SelectedQuery = $QueryMatches[$StartIdx + $OptionNumber - 1].MetaFile
+                $SelectedQueries += $SelectedQuery
+
+                Write-HostMessage -success "Query '$($SelectedQuery.BaseName)' added to the import list"
                 continue
             }
 
