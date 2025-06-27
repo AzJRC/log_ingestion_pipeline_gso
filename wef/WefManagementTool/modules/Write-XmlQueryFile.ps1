@@ -184,9 +184,14 @@ function Write-XmlQueryFile {
                 # Queries can be categorized by the intent of the event:
                 #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
                 # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
-                # Query blocks are also tagged with author name. E.g. 
-                $ImportedQueryElementIdentifier = Search-QueryElementIdentifier
+                # Query blocks are also tagged with author name. E.g.
+                $ImportedQueries = [list[QueryElement]]::new()
+                Search-QueryElementIdentifier -ImportQueryElements $ImportedQueries -QueryElementId ($QueryList.QueryElements.Count + 1)
+                foreach ($QueryElement in $ImportedQueries) {
+                    $QueryList.AddQueryElement($QueryElement)
+                }
 
+                Write-HostMessage -success -Message "QueryElement(s) imported successfully"
             }
             3 {
                 # [TODO]
@@ -516,7 +521,14 @@ function Write-QueryListXmlFile {
         $XmlWriter.WriteStartElement("Query")
         $XmlWriter.WriteAttributeString("Id", $QueryElement.QueryId.ToString())
 
-        foreach ($QueryTypeElement in $QueryElement.QueryTypeElements) {
+        foreach ($QueryTypeElement in $QueryElement.SelectQueryElements) {
+            $XmlWriter.WriteStartElement($QueryTypeElement.Type)
+            $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
+            $XmlWriter.WriteString($QueryTypeElement.XPath)
+            $XmlWriter.WriteEndElement()  # Close Select or Suppress element
+        }
+
+        foreach ($QueryTypeElement in $QueryElement.SuppressQueryElements) {
             $XmlWriter.WriteStartElement($QueryTypeElement.Type)
             $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
             $XmlWriter.WriteString($QueryTypeElement.XPath)
@@ -564,36 +576,259 @@ function Search-QueryElementIdentifier {
     #
     # * Querying by technique can be very subjective.
     #   Frequent review of this kind of tagging is important
-    
     param(
-        [string]$Root = "$PSScriptRoot\QueriesDB",
-        [string]$Intent,
-        [string]$Author,
-        [int[]]$EventIDs,
-        [string[]]$Providers,
-        [string[]]$Techniques
+        [list[QueryElement]]$ImportQueryElements,
+        [int]$QueryElementId
     )
 
+    $ImportedQueryElementCount = 0
+
+    # Search parameters
+    [list[string]]$QueryIntents = [List[string]]::new()
+    [List[int]]$Events = [List[int]]::new()
+    [List[string]]$Providers = [List[string]]::new()
+    [List[string]]$Channels = [List[string]]::new()
+    [List[string]]$Authors = [List[string]]::new()
+    [List[string]]$Techniques = [List[string]]::new()
+    [List[string]]$Tags = [List[string]]::new()
+
+    # Ask user for matching keywords
+    while ($true) {
+        $RawKeywords = Read-HostInput -Message "Search for query element ['h' for help, 't' for tag list]" -Prompt ":" -AllowString
+        if ($RawKeywords.ToUpper() -eq 'H') {
+
+            Write-HostMessage -Message "Search for query elements by specifying matching values from the meta.json query files"
+
+            Write-BlankLine
+
+            Write-HostMessage -Message "Use !I:{Intent} to search by intent. E.g. '!I:ia' (Identity and Access), '!I:User Account management'"
+            Write-HostMessage -Message "Use !A:{Author} to search by author. E.g. '!A:AzJRC', '!A:WefManagementTool'"
+            Write-HostMessage -Message "Use !E:{Events} to search by event IDs. E.g. '!E:4624', '!E:4624,4625', '!E:4624-4630,4632"
+            Write-HostMessage -Message "Use !P:{Providers} to search by providers. E.g. '!P:Microsoft-Windows-WMI-Activity'"
+            Write-HostMessage -Message "Use !C:{Channels} to search by channels. E.g. '!C:Security'"
+            Write-HostMessage -Message "Use !T:{Techniques} to search by Att&ck Techniques. E.g. '!T:T1047'"
+            Write-HostMessage -Message "Use !TA:{Tags} to search by tags. E.g. '!TA:Lateral Movement, Scripting'"
+
+            Write-BlankLine
+
+            Write-HostMessage -Message "Indidual search operations are OR-ed."
+            Write-HostMessage -Message "All search operations are AND-ed"
+            Write-HostMessage -Message "String-based search operations are case-insensitive"
+            Write-HostMessage -Message "Intent, Providers, and Channels will match substrings. E.g. '!I:User Account' will match the subintent 'User Account Management'"
+
+            Write-BlankLine
+
+            continue
+        }
+        elseif ($RawKeywords.ToUpper() -eq 'T') {
+            # [TODO] Print available tags
+
+            continue
+        }
+
+        # Parse keywords
+        # E.g. !I:IA !T:T1047
+        # E.g. !A:AzJRC
+        # E.g. !TA:Scripting, Lateral Movement, DLL
+        # E.g. !I:Account Management !A:WefManagementTool !E:4000-5000 !T:T1059
+
+        $KeywordRegex = '!(?<Keyword>I|A|E|P|C|T|TA):(?<Value>[a-zA-Z0-9-\s,]+)(?:\s|$)'
+        $KeywordMatches = [regex]::Matches($RawKeywords, $KeywordRegex)
+        
+        foreach ($KeywordMatch in $KeywordMatches) {
+            $Keyword = ($KeywordMatch.Groups["Keyword"].Value).ToUpper()
+            $Values = (($KeywordMatch.Groups["Value"].Value) -split ',' | ForEach-Object { $_.Trim() })
+            
+
+            switch ($Keyword) {
+                'I' { 
+                    # Normalize QueryIntent value
+                    $Values = $Values | ForEach-Object {
+                        switch ($_) {
+                            'as' { 'application_and_services' }
+                            'ia' { 'identity_and_access' }
+                            'sa' { 'security_and_auditing' }
+                            'n' { 'network' }
+                            's' { 'system' }
+                            Default { $_ }
+                        }
+                    }
+                    foreach ($Value in $Values) { $QueryIntents.Add( ($Value.ToLower() -replace ('[ ]+', '_')) ) }
+                    break
+                }
+                'A' {
+                    # No preprocessing required
+                    foreach ($Value in $Values) { $Authors.Add($Value) }
+                    break
+                }
+                'E' {
+                    foreach ($Value in $Values) {
+                        if ($Value -match "^(\d+)-(\d+)$") {
+                            # It's a range like "1000-1005"
+                            $LowerBound = [int]$Matches[1]
+                            $UpperBound = [int]$Matches[2]
+
+                            if ($LowerBound -le $UpperBound) {
+                                $Range = $LowerBound..$UpperBound
+                                foreach ($EventId in $Range) {
+                                    $Events.Add($EventId)
+                                }
+                            }
+                        }
+                        else {
+                            # Try parse as single integer
+                            [int]$IntValue = 0
+                            $Success = [int32]::TryParse($Value, [ref]$IntValue)
+                            if ($Success) {
+                                $Events.Add($IntValue)
+                            }
+                        }
+                    }
+                    break
+                }
+                'P' {
+                    # No preprocessing required
+                    foreach ($Value in $Values) { $Providers.Add($Value) }
+                    break
+                }
+                'C' {
+                    # No preprocessing required
+                    foreach ($Value in $Values) { $Channels.Add($Value) }
+                    break
+                }
+                'T' {
+                    # Validate Att&ck technique format T[Number]
+                    foreach ($Value in $Values) {
+                        if ($Value -match '^T\d+$') {
+                            $Techniques.Add($Value) 
+                        }
+                    }
+                    break
+                }
+                'TA' {
+                    # No preprocessing required
+                    foreach ($Value in $Values) { 
+                        $Tags.Add(($Value.ToLower() -replace ('[ ]+', '_')))
+                    }
+                    break
+                }
+                default { continue }    # Skip
+            }
+        }
+
+        break
+    }
+
     $QueryMatches = @()
-
     $MetaFiles = Get-ChildItem -Path $Root -Recurse -Filter "*.meta.json" -File
-
     foreach ($MetaFile in $MetaFiles) {
         $Meta = Get-Content $MetaFile.FullName | ConvertFrom-Json
+        
+        # By default, no matching queries
+        $Match = 0  # Match index - The higher, the more relevant the query
 
-        $Match = $true
-        if ($Intent -and -not ($Meta.intent -contains $Intent)) { $Match = $false }
-        if ($Author -and -not ($Meta.author.name -like "*$Author*" -or $Meta.author.alias -like "*$Author*")) { $Match = $false }
-        if ($EventIDs -and -not ($Meta.events | Where-Object { $EventIDs -contains $_ })) { $Match = $false }
-        if ($Providers -and -not ($Meta.providers | Where-Object { $Providers -contains $_ })) { $Match = $false }
-        if ($Techniques -and -not ($Meta.mitre_attack | Where-Object { $Techniques -contains $_ })) { $Match = $false }
+        # Matching aspects (Intent, Event relevance, providers, channels, authors, att&ck techniques, and provided tags)
+        if ($QueryIntents.Length -gt 0 -and -not ($QueryIntents -contains $Meta.QueryIntent.Intent -or $QueryIntents -contains $Meta.QueryIntent.SubIntent -or $QueryIntents -contains $Meta.QueryIntent.SubSubIntent)) { $Match = 0 } elseif ($QueryIntents.Length -gt 0) { $Match += 1 }
+        if ($Events.Length -gt 0 -and -not ($Meta.Events | Where-Object { [int]$_ -in $Events })) { $Match = 0 } elseif ($Events.Length -gt 0) { $Match += 1 }
+        if ($Providers.Length -gt 0 -and -not ($Meta.Providers | Where-Object { $Providers -contains $_ })) { $Match = 0 } elseif ($Providers.Length -gt 0) { $Match += 1 }
+        if ($Channels.Length -gt 0 -and -not ($Meta.Channels | Where-Object { $Channels -contains $_ })) { $Match = 0 } elseif ($Channels.Length -gt 0) { $Match += 1 }
+        if ($Authors.Length -gt 0 -and -not ($Meta.QueryAuthors.AuthorName -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorAlias -like "*$($Authors | ForEach-Object ( $_ ))*" -or $Meta.QueryAuthors.AuthorProject -like "*$($Authors | ForEach-Object ( $_ ))*")) { $Match = 0 } elseif ($Authors.Length -gt 0) { $Match += 1 }
+        if ($Techniques.Length -gt 0 -and -not ($Meta.AttackMappings | Where-Object { $_ -in $Techniques })) { $Match = 0 } elseif ($Techniques.Length -gt 0) { $Match += 1 }
+        if ($Tags.Length -gt 0 -and -not ($Meta.Tags | Where-Object { $_ -in $Tags })) { $Match = 0 } elseif ($Tags.Length -gt 0) { $Match += 1 }
 
-        if ($Match) {
-            $QueryMatches += $MetaFile.FullName -replace '\.meta\.json$', '.query.xml'
+        # If matched, add to query matches
+        if ($Match -gt 0) {
+            $QueryMatches += [PSCustomObject]@{
+                QueryName  = $Meta.QueryName
+                MetaFile   = $MetaFile
+                MatchIndex = $Match
+                Imported   = $false
+            }
         }
     }
 
-    return $QueryMatches
+    if ($QueryMatches.Count -eq 0) {
+        Write-HostMessage -warning "No matching queries found"
+        return $null
+    }
+
+    # Order matches by relevance
+    $QueryMatches = $QueryMatches | Sort-Object -Property MatchIndex -Descending
+
+    # Inspect QueryMatches, 5 at a time. Show first the most relevant matches
+    $Window = 5
+    $Iterations = [math]::ceiling($QueryMatches.Count / 5)
+    for ($StartIdx = 0; $StartIdx -lt $Iterations; $StartIdx += $Window ) {
+
+        $DisallowedOptions = [list[int]]::new()
+
+        while ($true) {
+
+            Write-HostMenu -Message "Select the matched queries you want to import"
+            for ($i = 0; $i -lt $Window; $i += 1) {
+                if (($StartIdx + $i) -ge $QueryMatches.Count) { break } # Break before overflow
+                if ($QueryMatches[$StartIdx + $i].Imported) { continue }   # Skip already imported options
+
+                Write-HostMenuOption -OptionNumber ($i + 1) -Message $QueryMatches[$StartIdx + $i].QueryName
+            }
+
+            $Option = Read-HostInput -Message "Enter option number [Type !I:{Number} to inspect a query or 'q' to exit]" -Prompt ">" -AllowString
+            if ($Option.ToUpper() -eq 'Q') { break }
+            
+
+            #Convert to number
+            [int]$OptionNumber = 0
+            $Success = [int32]::TryParse($Option, [ref]$OptionNumber)
+
+            # Inspect query
+            if ($Option -match '^!I:[1-5]$') { 
+                # [TODO] Inspect Query
+                # ...
+                Write-HostMessage -warning "[TODO] Feature not ready"
+                continue
+            }
+            
+            if ($Success) {
+                if ($DisallowedOptions -contains $OptionNumber) { Write-HostMessage -err "Invalid option"; continue }
+                $QueryMatches[$StartIdx + $OptionNumber - 1].Imported = $true
+                $DisallowedOptions.Add($Option)
+
+                $SelectedMetaQuery = $QueryMatches[$StartIdx + $OptionNumber - 1].MetaFile 
+                $QueryFileName = $SelectedMetaQuery.FullName -replace ('meta.json', 'query.xml')
+                $RawQueryFile = Get-Content -Path $QueryFileName
+                [xml]$XmlQueryFile = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawQueryFile"
+
+                $NewQueryElement = [QueryElement]::new($QueryElementId + $ImportedQueryElementCount)
+
+                # Add SELECTOR elements
+                foreach ($SelectItem in $XmlQueryFile.Query.Select) {
+                    $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
+                    $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
+                    $NewSelectorQueryElement = [QueryTypeElement]::new([QueryTypeElement]::QUERY_TYPE_SELECT, $SelectorChannelPath, $XPathExpression)
+                    $NewQueryElement.AddQueryTypeElement($NewSelectorQueryElement)
+                }
+
+                # Add SUPPRESSOR elements
+                foreach ($SelectItem in $XmlQueryFile.Query.Suppress) {
+                    $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
+                    $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
+                    $NewSelectorQueryElement = [QueryTypeElement]::new([QueryTypeElement]::QUERY_TYPE_SUPPRESS, $SelectorChannelPath, $XPathExpression)
+                    $NewQueryElement.AddQueryTypeElement($NewSelectorQueryElement)
+                }
+
+                $ImportQueryElements.Add($NewQueryElement)
+                $ImportedQueryElementCount += 1
+
+                Write-HostMessage -success "Query '$($SelectedMetaQuery.Name -replace ('meta.json', 'query.xml'))' added to the import list"
+                continue
+            }
+
+            Write-HostMessage -err "Something went wrong when validating your option"
+            continue
+        }
+    }
+
+    return
 }
 
 # Call Main

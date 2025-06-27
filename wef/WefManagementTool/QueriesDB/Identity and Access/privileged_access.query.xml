@@ -1,0 +1,17 @@
+<!--
+    QueryName:      Privileged Access
+    QueryIntent:    Identity and Access > Privilege Escalation
+    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
+    Attack:         T1068
+    Tag:            Privilege Use
+    Tag:            Access Control
+    Tag:            Audit Policy
+-->
+<Query Id="0">
+    <!--
+        (4672) Special privileges assigned to new logon
+        (4673) Privileged service called
+        (4674) Operation performed on object with admin privilege
+    -->
+    <Select Path="Security">*[System[(EventID=4672 or EventID=4673 or EventID=4674)]]</Select>
+</Query>

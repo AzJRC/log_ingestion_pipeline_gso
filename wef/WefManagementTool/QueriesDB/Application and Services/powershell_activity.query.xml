@@ -1,0 +1,19 @@
+<!--
+    QueryName:      PowerShell Activity
+    QueryIntent:    Application and Services > Script Execution > PowerShell
+    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
+    Attack:         T1059
+    Tag:            Scripting
+    Tag:            Execution
+    Tag:            Audit Policy
+-->
+<Query Id="0">
+    <!--
+        (4103) Module logging
+        (4104) ScriptBlock logging
+        (4105) Script started
+        (4106) Script ended
+    -->
+    <Select Path="Microsoft-Windows-PowerShell/Operational">*[System[(EventID=4103 or EventID=4104
+        or EventID=4105 or EventID=4106)]]</Select>
+</Query>

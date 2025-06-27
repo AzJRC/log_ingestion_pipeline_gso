@@ -209,7 +209,7 @@ function Extract-ProvidersFromChannels {
         $Channels
     )
 
-    $Providers = [list[int]]::new()
+    $Providers = [list[string]]::new()
 
     Foreach ($Channel in $Channels) {
         $Provider = ($Channel -split '/')[0]    # Assumes a structure {provider_name}/{channel_stream_name}
@@ -271,7 +271,7 @@ function Parse-RawQueryAuthor {
     )
 
     # Author: John Doe, JohnDoe123, WefManagementTool
-    $AuthorParts = $RawQueryAuthor -split ',' | ForEach-Object { $_.Trim() }
+    $AuthorParts = $RawQueryAuthor -split ',' | ForEach-Object { $_.Trim().ToLower() -replace ('[ ]+', '_') }
 
     # Ensure the array has exactly 3 elements
     while ($AuthorParts.Count -lt 3) {
