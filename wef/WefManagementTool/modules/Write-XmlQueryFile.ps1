@@ -720,7 +720,7 @@ function Search-QueryElementIdentifier {
     }
 
     $QueryMatches = @()
-    $Root = Join-Path -Path ((Join-Path -Path $(pwd) -ChildPath '..') | Resolve-Path ) -ChildPath 'QueriesDB'
+    $Root = Join-Path -Path ((Join-Path -Path $PSScriptRoot -ChildPath '..') | Resolve-Path ) -ChildPath 'QueriesDB'
     $MetaFiles = Get-ChildItem -Path $Root -Recurse -Filter "*.meta.json" -File
     foreach ($MetaFile in $MetaFiles) {
         $Meta = Get-Content $MetaFile.FullName | ConvertFrom-Json
