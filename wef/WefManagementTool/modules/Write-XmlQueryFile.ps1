@@ -184,10 +184,14 @@ function Write-XmlQueryFile {
                 # Queries can be categorized by the intent of the event:
                 #   System events, Network events, Security & Auditing events, Applications and Services events, and Identity & Access events
                 # Queries can also be subcategorized. E.g. Network -> SMB, System -> Registry change, or Identity and Acess -> User authentication
-                # Query blocks are also tagged with author name. E.g. 
-                $Result = Search-QueryElementIdentifier
-                Write-HostMessage -success -Message "QueryElement added successfully"
-                break
+                # Query blocks are also tagged with author name. E.g.
+                $ImportedQueries = [list[QueryElement]]::new()
+                Search-QueryElementIdentifier -ImportQueryElements $ImportedQueries -QueryElementId ($QueryList.QueryElements.Count + 1)
+                foreach ($QueryElement in $ImportedQueries) {
+                    $QueryList.AddQueryElement($QueryElement)
+                }
+
+                Write-HostMessage -success -Message "QueryElement(s) imported successfully"
             }
             3 {
                 # [TODO]
@@ -517,7 +521,14 @@ function Write-QueryListXmlFile {
         $XmlWriter.WriteStartElement("Query")
         $XmlWriter.WriteAttributeString("Id", $QueryElement.QueryId.ToString())
 
-        foreach ($QueryTypeElement in $QueryElement.QueryTypeElements) {
+        foreach ($QueryTypeElement in $QueryElement.SelectQueryElements) {
+            $XmlWriter.WriteStartElement($QueryTypeElement.Type)
+            $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
+            $XmlWriter.WriteString($QueryTypeElement.XPath)
+            $XmlWriter.WriteEndElement()  # Close Select or Suppress element
+        }
+
+        foreach ($QueryTypeElement in $QueryElement.SuppressQueryElements) {
             $XmlWriter.WriteStartElement($QueryTypeElement.Type)
             $XmlWriter.WriteAttributeString("Path", $QueryTypeElement.Channel)
             $XmlWriter.WriteString($QueryTypeElement.XPath)
@@ -565,7 +576,12 @@ function Search-QueryElementIdentifier {
     #
     # * Querying by technique can be very subjective.
     #   Frequent review of this kind of tagging is important
-    
+    param(
+        [list[QueryElement]]$ImportQueryElements,
+        [int]$QueryElementId
+    )
+
+    $ImportedQueryElementCount = 0
 
     # Search parameters
     [list[string]]$QueryIntents = [List[string]]::new()
@@ -726,6 +742,7 @@ function Search-QueryElementIdentifier {
                 QueryName  = $Meta.QueryName
                 MetaFile   = $MetaFile
                 MatchIndex = $Match
+                Imported   = $false
             }
         }
     }
@@ -741,21 +758,27 @@ function Search-QueryElementIdentifier {
     # Inspect QueryMatches, 5 at a time. Show first the most relevant matches
     $Window = 5
     $Iterations = [math]::ceiling($QueryMatches.Count / 5)
-    $SelectedQueries = @()
     for ($StartIdx = 0; $StartIdx -lt $Iterations; $StartIdx += $Window ) {
+
+        $DisallowedOptions = [list[int]]::new()
 
         while ($true) {
 
             Write-HostMenu -Message "Select the matched queries you want to import"
-            Write-BlankLine
-
             for ($i = 0; $i -lt $Window; $i += 1) {
-                if (($StartIdx + $i) -ge $QueryMatches.Count) { break }
+                if (($StartIdx + $i) -ge $QueryMatches.Count) { break } # Break before overflow
+                if ($QueryMatches[$StartIdx + $i].Imported) { continue }   # Skip already imported options
+
                 Write-HostMenuOption -OptionNumber ($i + 1) -Message $QueryMatches[$StartIdx + $i].QueryName
             }
 
             $Option = Read-HostInput -Message "Enter option number [Type !I:{Number} to inspect a query or 'q' to exit]" -Prompt ">" -AllowString
             if ($Option.ToUpper() -eq 'Q') { break }
+            
+
+            #Convert to number
+            [int]$OptionNumber = 0
+            $Success = [int32]::TryParse($Option, [ref]$OptionNumber)
 
             # Inspect query
             if ($Option -match '^!I:[1-5]$') { 
@@ -764,18 +787,39 @@ function Search-QueryElementIdentifier {
                 Write-HostMessage -warning "[TODO] Feature not ready"
                 continue
             }
-
-            #Convert to number
-            [int]$OptionNumber = 0
-            $Success = [int32]::TryParse($Option, [ref]$OptionNumber)   
             
             if ($Success) {
-                if ($OptionNumber -gt $i -or $OptionNumber -le 0) { Write-HostMessage -err "Invalid option"; continue }
-                
-                $SelectedQuery = $QueryMatches[$StartIdx + $OptionNumber - 1].MetaFile
-                $SelectedQueries += $SelectedQuery
+                if ($DisallowedOptions -contains $OptionNumber) { Write-HostMessage -err "Invalid option"; continue }
+                $QueryMatches[$StartIdx + $OptionNumber - 1].Imported = $true
+                $DisallowedOptions.Add($Option)
 
-                Write-HostMessage -success "Query '$($SelectedQuery.BaseName)' added to the import list"
+                $SelectedMetaQuery = $QueryMatches[$StartIdx + $OptionNumber - 1].MetaFile 
+                $QueryFileName = $SelectedMetaQuery.FullName -replace ('meta.json', 'query.xml')
+                $RawQueryFile = Get-Content -Path $QueryFileName
+                [xml]$XmlQueryFile = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawQueryFile"
+
+                $NewQueryElement = [QueryElement]::new($QueryElementId + $ImportedQueryElementCount)
+
+                # Add SELECTOR elements
+                foreach ($SelectItem in $XmlQueryFile.Query.Select) {
+                    $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
+                    $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
+                    $NewSelectorQueryElement = [QueryTypeElement]::new([QueryTypeElement]::QUERY_TYPE_SELECT, $SelectorChannelPath, $XPathExpression)
+                    $NewQueryElement.AddQueryTypeElement($NewSelectorQueryElement)
+                }
+
+                # Add SUPPRESSOR elements
+                foreach ($SelectItem in $XmlQueryFile.Query.Suppress) {
+                    $XPathExpression = $SelectItem.'#text'.Trim() -replace ('[ ]+', ' ')
+                    $SelectorChannelPath = $SelectItem.Attributes["Path"].Value
+                    $NewSelectorQueryElement = [QueryTypeElement]::new([QueryTypeElement]::QUERY_TYPE_SUPPRESS, $SelectorChannelPath, $XPathExpression)
+                    $NewQueryElement.AddQueryTypeElement($NewSelectorQueryElement)
+                }
+
+                $ImportQueryElements.Add($NewQueryElement)
+                $ImportedQueryElementCount += 1
+
+                Write-HostMessage -success "Query '$($SelectedMetaQuery.Name -replace ('meta.json', 'query.xml'))' added to the import list"
                 continue
             }
 
@@ -784,8 +828,7 @@ function Search-QueryElementIdentifier {
         }
     }
 
-    # Return list of queries to import
-    return $SelectedQueries
+    return
 }
 
 # Call Main
