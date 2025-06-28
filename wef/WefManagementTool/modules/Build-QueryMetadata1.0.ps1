@@ -1,0 +1,40 @@
+
+# Build-MetadataQuery follows QUERY.XML schema V1.0
+function Build-MetadataQuery {
+    param(
+        [string]$RootDatabase = (Join-Path $PSScriptRoot "..\\QueriesDB" | Resolve-Path)
+    )
+
+    $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
+
+    foreach ($XmlQueryFile in $XmlQueryFiles) {
+        $RawXmlLines = Get-Content $XmlQueryFile.FullName
+
+        # 1. Parse comment block metadata
+        $Meta = Parse-CommentBlock -Lines $RawXmlLines
+
+        # 2. Parse <Query> elements
+        [xml]$Xml = $RawXmlLines -join "`n"
+        $QueryElements = Parse-QueryXmlElements -Xml $Xml
+
+        # 3. Compose final metadata object
+        $JsonObject = [ordered]@{
+            MetaSchemaVersion = $Meta.MetaSchemaVersion
+            QueryName         = $Meta.QueryName
+            QueryIntent       = @{ Primary = $Meta.Primary; Secondary = $Meta.Secondary }
+            Platform          = $Meta.Platform
+            SecurityProfile   = $Meta.SecurityProfile
+            Authors           = $Meta.Authors
+            References        = $Meta.References
+            Tags              = $Meta.Tags
+            RequiresAudit     = $Meta.RequiresAudit
+            RequiredSettings  = $Meta.RequiredSettings
+            Description       = $Meta.Description
+            QueryElements     = $QueryElements
+        }
+
+        # 4. Write META.JSON
+        $OutputJsonPath = $XmlQueryFile.FullName -replace "query.xml", "meta.json"
+        $JsonObject | ConvertTo-Json -Depth 10 | Out-File $OutputJsonPath -Encoding UTF8
+    }
+}
