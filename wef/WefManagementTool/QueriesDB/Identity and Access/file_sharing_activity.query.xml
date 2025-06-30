@@ -1,10 +1,11 @@
 <!--
     MetaSchemaVersion:  META-1.0
     QueryName:          File Sharing Activity
+    Intent:
         - Primary:      Security & Auditing
         - Secondary:    Network
-    Platform:           WIN7, WIN10, WIN2016, WIN2019, WIN2022
-    SecurityProfile:    Member Server, Workstation
+    Platform:           WIN7, WIN8, WIN10, WIN2008, WIN2012, WIN2016, WIN2019, WIN2022
+    SecurityProfile:    Member Server, Workstation, Domain Controllers
     Author:
         - Name:         Alejandro Rodriguez
         - Alias:        Username/AzJRC
@@ -12,7 +13,7 @@
         - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
     Reference:
         - Name:         Michael
-        - Alias:        mdecrevoisier
+        - Alias:        Username/mdecrevoisier
         - Resource:     Github/Windows-auditing-baseline
         - Resource:     URL/https://github.com/mdecrevoisier/Windows-auditing-baseline
     QueryVersion:       1.0
