@@ -68,7 +68,7 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 | `Platform` 	| List of operating systems this query applies to. Allowed values include `WIN7`, `WIN8`, (`WIN8.1`), `WIN10`, `WIN11`, `WIN2008`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022`, and `WIN2025`. 	| `WIN8`, `WIN10`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022` 	|
 | `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
 | `Reference` 	| External documentation or advisories. 	| - 	|
-| `QueryDate` 	| Date of creation or last revision. Dates must use the format `DD/MM/YYYY` or `DD-MM-YYYY`. 	| 23-07-2025 	|
+| `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY/MM/DD` or `YYYY-MM-DD`. 	| 2025-07-23 	|
 | `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
 | `RequiresAudit` 	| Indicates if this query needs additional auditing enabled. [Upcoming feature] 	| - 	|
 | `RequiredSettings` 	| Lists audit policy or configuration settings needed for full effectiveness. [Upcoming feature] 	| - 	|
