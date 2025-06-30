@@ -21,8 +21,6 @@ MetadataSchema
     "tags": ["tag_1", "tag_2", "tag_3", ...]                            # Related terms to the query's intent
 }#>
 
-# [NOTE] Program with PowerShell 7.5.1 works
-
 class QueryAuthor {
     [ValidateNotNullOrEmpty()][string]$AuthorName
     [ValidateNotNullOrEmpty()][string]$AuthorAlias
@@ -106,7 +104,6 @@ function Build-MetadataQuery {
     if (-not $RootDatabase) { 
         $RootDatabase = Join-Path -Path ((Join-Path -Path $PSScriptRoot -ChildPath '..') | Resolve-Path) -ChildPath 'QueriesDB'
     }
-    
 
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 

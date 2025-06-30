@@ -2,15 +2,11 @@
 
 This document describes the standardized schema for `QUERY.XML` metadata files used in this project. These XML files encapsulate structured information about security detection queries, making them portable, versioned, and auditable.
 
----
-
 ## Objectives
 
 - Establish a consistent format for documenting detection queries.
 - Standardize fields to support programmatic parsing and future automation (e.g., audit policy recommendations).
 - Facilitate sharing and maintenance of queries across platforms and environments.
-
----
 
 ## Metadata Structure
 
@@ -107,3 +103,36 @@ For the `Resource` field, you must specify the type of resource using the value 
 | `Github`      | Name of the GitHub repository.                          |
 | `URL`         | URL to the online resource.                             |
 | `Misc`        | Other resources.                                        |
+
+```diff
++ Please, never forget to acknowledge the work of other people!
+```
+
+## Intent recommendations
+
+Microsoft Windows follows a standard audit policy of categories and subcategories (as found in `auditpol`). The following table showcases a clear one-to-one mapping between the field `Intent.Primary` categories and Microsoft’s audit categories and subcategories.
+
+| Microsoft Category (Secondary) 	| Intent.Primary 	| Notes & examples 	|
+|:---:	|:---:	|:---:	|
+| Account Logon 	| Identity and Access 	| Kerberos, credential validation 	|
+| Account Management 	| Identity and Access 	| user & group mgmt 	|
+| Logon/Logoff 	| Identity and Access 	| session tracking, VPN, IPSec 	|
+| DS Access 	| Identity and Access 	| Directory Services 	|
+| Privilege Use 	| Identity and Access 	| privilege elevation 	|
+| Policy Change 	| Security and Auditing 	| audit policies, authz policies 	|
+| Object Access 	| Security and Auditing 	| file shares, registry, storage 	|
+| Detailed Tracking 	| Security and Auditing 	| process creation, DPAPI, RPC 	|
+| Global Object Access Auditing 	| Security and Auditing 	| sweeping resource access 	|
+| System 	| System 	| IPsec driver, system integrity, state changes 	|
+| - 	| Application and Services 	| Reserved for SQL server applications or any provider outside of the security-centric categories 	|
+| - 	| Network 	| Reserved for IIS, DNS, DHCP, Firewall or external systems that generate network-related logs 	|
+
+* Depending on the needs of your organization, you may want to tweek the suggested assignments.
+
+## RequiresAudit and AuditSettings fields
+
+```diff
+- Future implementation
+```
+
+The `RequiresAudit` and `AuditSettings` field will allow the user to decide if they want to enable required settings automatically.
