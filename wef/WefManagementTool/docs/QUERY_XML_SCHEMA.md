@@ -17,7 +17,7 @@ Each `QUERY.XML` must include a comment block following this structure:
     MetaSchemaVersion:  1.0
     QueryName:          File Sharing Activity
     Intent:
-        - Primary:      Security & Auditing
+        - Primary:      Security and Auditing
         - Secondary:    Network
     Platform:           WIN7, WIN10, WIN2016, WIN2019, WIN2022
     SecurityProfile:    Member Server, Workstation
@@ -52,39 +52,44 @@ Each `QUERY.XML` must include a comment block following this structure:
 
 The following table enlists the mandatory fields of a `QUERY.XML` file.
 
-| Field               | Description                                                                                                                       |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `MetaSchemaVersion` | Version of this metadata schema. Ensures backward compatibility.                                                                  |
-| `QueryName`         | Human-readable descriptive name of the query.                                                                                     |
-| `Intent.Primary`    | Must be one of: `Security & Auditing` (sa), `Application & Services` (as), `Identity & Access` (ia), `System` (s), `Network` (n). |
-| `Author`            | Structured information including Name, Alias, and Resource.                                                                       |
-| `QueryVersion`      | Version number of the query logic or scope.                                                                                       |
+| Field 	| Description 	|
+|---	|---	|
+| `MetaSchemaVersion` 	| Version of this metadata schema. Ensures backward compatibility and programmability of scripting tools. 	|
+| `QueryName` 	| Human-readable descriptive name of the query. 	|
+| `Intent.Primary` 	| Intent of the query. Must be one of the following allowed values: `Security and Auditing`, `Application and Services`, `Identity and Access`, `System`, `Network`. 	|
+| `Author` 	| Structured information including the name, alias, and related resources of the person that created a query. 	|
+| `QueryVersion` 	| Version number in format `X.Y`. Minor changes involve modifying or fixing already declared Select or Suppress tags that do not change the intent of the query. Major changes involve adding new Select or Suppress queries or changes that affect the intent of the query. 	|
 
 The following table enlists the non mandatory (but strictly recommended) fields of a QUERY.XML file.
 
-| Field              | Description                                                                  |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `Intent.Secondary` | More granular category, open to interpretation (e.g., `Network File Share`). |
-| `Platform`         | List of operating systems this query applies to.                             |
-| `SecurityProfile`  | Roles or asset types relevant for the query (e.g., `Domain Controller`).     |
-| `Reference`        | External documentation or advisories.                                        |
-| `QueryDate`        | Date of creation or last revision.                                           |
-| `Tag`              | Multi-key taxonomy for advanced categorization (explained below).            |
-| `RequiresAudit`    | Indicates if this query needs additional auditing enabled.                   |
-| `RequiredSettings` | Lists audit policy or configuration settings needed for full effectiveness.  |
-| `Description`      | Free text summary of the query purpose and scope.                            |
+| Field 	| Description 	| Example value	|
+|---	|---	|---	|
+| `Intent.Secondary` 	| More granular category, open to interpretation. We suggest using `auditpol` keywords or Mitre Att&ck alike terms. You can declare more than one secondary intent using commas[^1].	| `Account Management, Kerberos Operation` 	|
+| `Platform` 	| List of operating systems this query applies to. Allowed values include `WIN7`, `WIN8`, (`WIN8.1`), `WIN10`, `WIN11`, `WIN2008`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022`, and `WIN2025`. 	| `WIN8`, `WIN10`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022` 	|
+| `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
+| `Reference` 	| External documentation or advisories. 	| - 	|
+| `QueryDate` 	| Date of creation or last revision. Dates must use the format `DD/MM/YYYY` or `DD-MM-YYYY`. 	| 23-07-2025 	|
+| `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
+| `RequiresAudit` 	| Indicates if this query needs additional auditing enabled. [Upcoming feature] 	| - 	|
+| `RequiredSettings` 	| Lists audit policy or configuration settings needed for full effectiveness. [Upcoming feature] 	| - 	|
+| `Description` 	| Free text summary of the query purpose and scope. 	| - 	|
+
+[^1]: We suggest keeping the `Intent.Secondary` field as short as possible.
 
 ## Tag Structure
 
 Tags use `Key/Value` pair values to provide semantic categorization. Recommended keys:
 
-| Key           | Purpose                                                                                                           |
-| ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Technique`   | Maps to MITRE ATT\&CK techniques (e.g., `Technique/T1071.002`).                                                   |
-| `Category`    | Aligns with Microsoft's high-level audit policy categories (e.g., `Category/Object Access`).                      |
-| `Subcategory` | Represents more detailed audit subcategories (e.g., `Subcategory/File Share`).                                    |
-| `Action`      | Describes the monitored behavior or operation (e.g., `Action/Resource Sharing`).                                  |
-| `Misc`        | Used for miscellaneous context such as protocols, special cases, or infrastructure references (e.g., `Misc/SMB`). |
+| Key 	| Purpose 	| Example value 	|
+|---	|---	|---	|
+| `Technique` 	| Maps to MITRE ATT\&CK techniques or subtechniques. 	| `Technique/T1071.002` 	|
+| `Category` 	| Aligns with Microsoft's high-level audit policy categories[^2]. 	| `Category/Resource Access` 	|
+| `Subcategory` 	| Aligns with Microsoft's detailed audit policy subcategories[^2]. 	| `Subcategory/File Share` 	|
+| `Action` 	| Describes the monitored behavior or operation to be monitored. Often similar to `Subcategory` but in verb-like form. 	| `Action/File Sharing` 	|
+| `Criticality` 	| Identifies whether the query should be considered `Low`, `Medium`, or `High` in detecting tactics and techniques. 	| `Criticality/Medium` 	|
+| `Misc` 	| Used for miscellaneous context such as protocols, special cases, or infrastructure references. 	| `Misc/SMB`, `Misc/ADDS` 	|
+
+[^2]: Run `auditpol /get /category:*` to see all categories and subcategories.
 
 ## Author and Reference structure
 
