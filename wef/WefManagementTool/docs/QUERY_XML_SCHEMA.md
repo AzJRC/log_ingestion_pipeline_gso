@@ -78,16 +78,18 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 
 ## Tag Structure
 
-Tags use `Key/Value` pair values to provide semantic categorization. Recommended keys:
+Tags use Key/Value pairs to provide semantic categorization of each query. This enables precise filtering, automated alert prioritization, and consistent documentation.
+
+You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`) to indicate that the query applies to several related items. Keep in mind that the `Category` and `Criticality` fields should have only one value.
 
 | Key 	| Purpose 	| Example value 	|
 |---	|---	|---	|
-| `Technique` 	| Maps to MITRE ATT\&CK techniques or subtechniques. 	| `Technique/T1071.002` 	|
-| `Category` 	| Aligns with Microsoft's high-level audit policy categories[^2]. 	| `Category/Resource Access` 	|
-| `Subcategory` 	| Aligns with Microsoft's detailed audit policy subcategories[^2]. 	| `Subcategory/File Share` 	|
-| `Action` 	| Describes the monitored behavior or operation to be monitored. Often similar to `Subcategory` but in verb-like form. 	| `Action/File Sharing` 	|
-| `Criticality` 	| Identifies whether the query should be considered `Low`, `Medium`, or `High` in detecting tactics and techniques. 	| `Criticality/Medium` 	|
-| `Misc` 	| Used for miscellaneous context such as protocols, special cases, or infrastructure references. 	| `Misc/SMB`, `Misc/ADDS` 	|
+| `Technique` 	| Maps to MITRE ATT&CK techniques or subtechniques, supporting standardized threat modeling. 	| `Technique/T1558, T1110` 	|
+| `Category` 	| Aligns with Microsoft's high-level audit policy categories, indicating broad areas of system activity[^2]. 	| `Category/Resource Access` 	|
+| `Subcategory` 	| Maps to Microsoft's detailed audit policy subcategories, providing granular context[^2]. 	| `Subcategory/File Share` 	|
+| `Action` 	| Describes the specific monitored behavior or operation, often reflecting a verb-like activity (e.g. "File Sharing"), a well-known adversary tactic (e.g. "Kerberoasting"), or a generic security operation (e.g. "Authentication"). 	| `Action/File Sharing`, `Action/Kerberoasting` 	|
+| `Criticality` 	| Indicates the expected impact level of the detection using the supported values `Low`, `Medium`, or `High`. 	| `Criticality/Medium` 	|
+| `Misc` 	| Used for additional context such as protocols, infrastructure elements, or environment specifics. 	| `Misc/SMB, ADDS` 	|
 
 [^2]: Run `auditpol /get /category:*` to see all categories and subcategories.
 
