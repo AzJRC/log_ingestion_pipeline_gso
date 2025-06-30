@@ -143,4 +143,3 @@ Microsoft Windows follows a standard audit policy of categories and subcategorie
 ```
 
 The `RequiresAudit` and `AuditSettings` field will allow the user to decide if they want to enable required settings automatically.
-
