@@ -1,19 +1,44 @@
 <!--
-    QueryName:      PowerShell Activity
-    QueryIntent:    Application and Services > Script Execution > PowerShell
-    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
-    Attack:         T1059
-    Tag:            Scripting
-    Tag:            Execution
-    Tag:            Audit Policy
+    MetaSchemaVersion:  1.0
+    QueryName:          Suspicious PowerShell Execution
+    Intent:
+        - Primary:      Application and Services
+        - Secondary:    PowerShell, Execution
+    Platform:           WIN7, WIN8, WIN10, Win2008, WIN2012, WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server, Workstation
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    QueryVersion:       1.0
+    QueryDate:          2025-06-30
+    Verbosity:          High
+    Requirements:       Windows Sysmon
+    Tag:                Technique/T1059.001 
+    Tag:                Action/Command Execution
+    Tag:                Source/Sysmon, Windows Events
+    Tag:                Misc/PowerShell, PS, Command
+    RequiresAudit:      Yes
+    RequiredSettings:
+        - GroupPolicy:  Computer Configuration > Administrative Templates > Windows Components > Windows PowerShell > Turn on PowerShell Script Block Logging
+            - Status:           Enable
+            - SubSettings:      Log script block inovocation start / stop events
+    Description:        Detects execution and activity of PowerShell.
 -->
 <Query Id="0">
     <!--
-        (4103) Module logging
-        (4104) ScriptBlock logging
-        (4105) Script started
-        (4106) Script ended
+        MetaSchemaVersion:  EVT-1.0
+        1 - Sysmon:                                         Process creation (-)
+        4103 - Microsoft-Windows-PowerShell/Operational:    Module logging (S)
+        4104 - Microsoft-Windows-PowerShell/Operational:    ScriptBlock logging (S)
+        4105 - Microsoft-Windows-PowerShell/Operational:    Script started (S)
+        4106 - Microsoft-Windows-PowerShell/Operational:    Script ended (S)
     -->
-    <Select Path="Microsoft-Windows-PowerShell/Operational">*[System[(EventID=4103 or EventID=4104
-        or EventID=4105 or EventID=4106)]]</Select>
+    <Select Path="Microsoft-Windows-Sysmon/Operational">
+        *[System[(EventID=1)] and EventData[Data[@Name='OriginalFileName'] and (Data='PowerShell.EXE')]]
+    </Select>
+    <Select Path="Microsoft-Windows-PowerShell/Operational">
+        *[System[(EventID=4103 or EventID=4104 or EventID=4105 or EventID=4106)]]
+    </Select>
 </Query>
