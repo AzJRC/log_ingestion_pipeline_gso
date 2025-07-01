@@ -69,7 +69,7 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 | `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
 | `Reference` 	| External documentation or advisories. 	| - 	|
 | `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY/MM/DD` or `YYYY-MM-DD`. 	| 2025-07-23 	|
-| `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. 	| `Low`, `Medium` 	|
+| `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. If the `QUERY.XML` file contains multiple complementary queries (with different IDs), this field must be set to the highest verbosity level among them. If the file contains alternative coverage queries (with the same ID), this field must list the verbosity levels of each option in order of declaration, separated by commas. 	| `High`, `Low, Medium` 	|
 | `Requirements` 	| List software or applications needed for the query to request events successfully. 	| `Windows Sysmon` 	|
 | `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
 | `RequiresAudit` 	| Indicates if this query needs additional auditing enabled. [Upcoming feature] 	| - 	|
@@ -78,23 +78,26 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 
 [^1]: We suggest keeping the `Intent.Secondary` field as short as possible.
 
-## Tag Structure
+## Intent recommendations
 
-Tags use Key/Value pairs to provide semantic categorization of each query. This enables precise filtering, automated alert prioritization, and consistent documentation.
+Microsoft Windows follows a standard audit policy of categories and subcategories (as found in `auditpol`). The following table showcases a clear one-to-one mapping between the field `Intent.Primary` categories and Microsoft’s audit categories and subcategories.
 
-You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`) to indicate that the query applies to several related items. Keep in mind that the `Criticality` field should have only one value.
+| Microsoft Category (Secondary) 	| Intent.Primary 	| Notes & examples 	|
+|:---:	|:---:	|:---:	|
+| Account Logon 	| Identity and Access 	| Kerberos, credential validation 	|
+| Account Management 	| Identity and Access 	| user & group mgmt 	|
+| Logon/Logoff 	| Identity and Access 	| session tracking, VPN, IPSec 	|
+| DS Access 	| Identity and Access 	| Directory Services 	|
+| Privilege Use 	| Identity and Access 	| privilege elevation 	|
+| Policy Change 	| Security and Auditing 	| audit policies, authz policies 	|
+| Object Access 	| Security and Auditing 	| file shares, registry, storage 	|
+| Detailed Tracking 	| Security and Auditing 	| process creation, DPAPI, RPC 	|
+| Global Object Access Auditing 	| Security and Auditing 	| sweeping resource access 	|
+| System 	| System 	| IPsec driver, system integrity, state changes 	|
+| - 	| Application and Services 	| Reserved for SQL server applications or any provider outside of the security-centric categories 	|
+| - 	| Network 	| Reserved for IIS, DNS, DHCP, Firewall or external systems that generate network-related logs 	|
 
-| Key 	| Purpose 	| Example value 	|
-|---	|---	|---	|
-| `Technique` 	| Maps to MITRE ATT&CK techniques or subtechniques, supporting standardized threat modeling. 	| `Technique/T1558, T1110` 	|
-| `Category` 	| Aligns with Microsoft's high-level audit policy categories, indicating broad areas of system activity[^2]. 	| `Category/Resource Access` 	|
-| `Subcategory` 	| Maps to Microsoft's detailed audit policy subcategories, providing granular context[^2]. 	| `Subcategory/File Share` 	|
-| `Action` 	| Describes the specific monitored behavior or operation, often reflecting a verb-like activity (e.g. "File Sharing"), a well-known adversary tactic (e.g. "Kerberoasting"), or a generic security operation (e.g. "Authentication"). 	| `Action/File Sharing`, `Action/Kerberoasting` 	|
-| `Criticality` 	| Indicates the expected impact level of the detection using the supported values `Low`, `Medium`, or `High`. 	| `Criticality/Medium` 	|
-| `Source` 	| Indicates the source of the event. 	| `Source/Sysmon`, `Source/Windows Events` 	|
-| `Misc` 	| Used for additional context such as protocols, infrastructure elements, or environment specifics. 	| `Misc/SMB, ADDS` 	|
-
-[^2]: Run `auditpol /get /category:*` to see all categories and subcategories.
+* Depending on the needs of your organization, you may want to tweek the suggested assignments.
 
 ## Author and Reference structure
 
@@ -118,26 +121,23 @@ For the `Resource` field, you must specify the type of resource using the value 
 + Please, never forget to acknowledge the work of other people!
 ```
 
-## Intent recommendations
+## Tag Structure
 
-Microsoft Windows follows a standard audit policy of categories and subcategories (as found in `auditpol`). The following table showcases a clear one-to-one mapping between the field `Intent.Primary` categories and Microsoft’s audit categories and subcategories.
+Tags use Key/Value pairs to provide semantic categorization of each query. This enables precise filtering, automated alert prioritization, and consistent documentation.
 
-| Microsoft Category (Secondary) 	| Intent.Primary 	| Notes & examples 	|
-|:---:	|:---:	|:---:	|
-| Account Logon 	| Identity and Access 	| Kerberos, credential validation 	|
-| Account Management 	| Identity and Access 	| user & group mgmt 	|
-| Logon/Logoff 	| Identity and Access 	| session tracking, VPN, IPSec 	|
-| DS Access 	| Identity and Access 	| Directory Services 	|
-| Privilege Use 	| Identity and Access 	| privilege elevation 	|
-| Policy Change 	| Security and Auditing 	| audit policies, authz policies 	|
-| Object Access 	| Security and Auditing 	| file shares, registry, storage 	|
-| Detailed Tracking 	| Security and Auditing 	| process creation, DPAPI, RPC 	|
-| Global Object Access Auditing 	| Security and Auditing 	| sweeping resource access 	|
-| System 	| System 	| IPsec driver, system integrity, state changes 	|
-| - 	| Application and Services 	| Reserved for SQL server applications or any provider outside of the security-centric categories 	|
-| - 	| Network 	| Reserved for IIS, DNS, DHCP, Firewall or external systems that generate network-related logs 	|
+You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`) to indicate that the query applies to several related items. Keep in mind that the `Criticality` field should have only one value.
 
-* Depending on the needs of your organization, you may want to tweek the suggested assignments.
+| Key 	| Purpose 	| Example value 	|
+|---	|---	|---	|
+| `Technique` 	| Maps to MITRE ATT&CK techniques or subtechniques, supporting standardized threat modeling. 	| `Technique/T1558, T1110` 	|
+| `Category` 	| Aligns with Microsoft's high-level audit policy categories, indicating broad areas of system activity[^2]. 	| `Category/Resource Access` 	|
+| `Subcategory` 	| Maps to Microsoft's detailed audit policy subcategories, providing granular context[^2]. 	| `Subcategory/File Share` 	|
+| `Action` 	| Describes the specific monitored behavior or operation, often reflecting a verb-like activity (e.g. "File Sharing"), a well-known adversary tactic (e.g. "Kerberoasting"), or a generic security operation (e.g. "Authentication"). 	| `Action/File Sharing`, `Action/Kerberoasting` 	|
+| `Criticality` 	| Indicates the expected impact level of the detection using the supported values `Low`, `Medium`, or `High`. 	| `Criticality/Medium` 	|
+| `Source` 	| Indicates the source of the event. 	| `Source/Sysmon`, `Source/Windows Events` 	|
+| `Misc` 	| Used for additional context such as protocols, infrastructure elements, or environment specifics. 	| `Misc/SMB, ADDS` 	|
+
+[^2]: Run `auditpol /get /category:*` to see all categories and subcategories.
 
 ## RequiresAudit and AuditSettings fields
 
@@ -191,3 +191,25 @@ Comment blocks follow a very flexible and easy syntax. This syntax is important 
 2. Each comment is separated by hyphens (`-`), similar to YAML syntax.
 3. At the begginning of each comment, you can add the type of message. `[!]` is for important messages, and `[*]` for general comments. The 'importance' or severity of a message is subjective. If not included, `[*]` is assumed.
 4. After the type of message symbol, you can type your message.
+
+## Multiple Query Elements (Verbosity vs Complementarity)
+
+A `QUERY.XML` file may contain multiple `<Query>` elements.
+
+- **Same `Id` repeated**: Signals alternative verbosity levels or scoping options. The user (or automation) can select which variant to import.
+- **Different `Id`s**: Treated as complementary detection components that are imported together under the same metadata intent.
+
+The `Id` property in the `QUERY.XML` file ensures uniqueness when importing multiple queries into a combined `<QueryList>` element, avoiding conflicts even when merging files.
+
+Use different IDs when:
+
+- Each `<Query>` covers a distinct but complementary aspect of the same security concern.
+- You intend to always import both queries when pulling the `QUERY.XML`.
+- They are logically separate detections, each with unique value.
+
+On the otherhand, use the same IDs when:
+
+- There are different granularities of the same detection concept.
+- The user (or tool) will select only one variant to import, based on performance or coverage needs.
+
+Additionally, keep in mind that using different IDs still allows you to adjust the coverage as needed by simply disabling or removing any query ID that is not required.
