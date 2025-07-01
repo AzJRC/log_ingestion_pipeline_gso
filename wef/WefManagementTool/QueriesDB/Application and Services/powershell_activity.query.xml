@@ -1,30 +1,30 @@
 <!--
     MetaSchemaVersion:  1.0
-    QueryName:          Suspicious PowerShell Execution
+    QueryName:          PowerShell Activity
     Intent:
         - Primary:      Application and Services
-        - Secondary:    PowerShell, Execution
-    Platform:           WIN7, WIN8, WIN10, Win2008, WIN2012, WIN2016, WIN2019, WIN2022, WIN2025
-    SecurityProfile:    Domain Controller, Member Server, Workstation
+        - Secondary:    PowerShell
+    Platform:           WIN10, WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server
     Author:
         - Name:         Alejandro Rodriguez
         - Alias:        Username/AzJRC
         - Resource:     Github/WefManagementTool
         - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    Reference:
+        - Resource:     URL/https://www.splunk.com/en_us/blog/security/hunting-for-malicious-powershell-using-script-block-logging.html
     QueryVersion:       1.0
     QueryDate:          2025-06-30
     Verbosity:          High
     Requirements:       Windows Sysmon
     Tag:                Technique/T1059.001 
-    Tag:                Action/Command Execution
+    Tag:                Action/Scripting, Command Execution
     Tag:                Source/Sysmon, Windows Events
-    Tag:                Misc/PowerShell, PS, Command
+    Tag:                Misc/PS, Script, Mimikatz, WMI
     RequiresAudit:      Yes
     RequiredSettings:
         - GroupPolicy:  Computer Configuration > Administrative Templates > Windows Components > Windows PowerShell > Turn on PowerShell Script Block Logging
-            - Status:           Enable
-            - SubSettings:      Log script block inovocation start / stop events
-    Description:        Detects execution and activity of PowerShell.
+    Description:        Detects execution of PowerShell processes and related activity, including module, script block, and lifecycle logging events.
 -->
 <Query Id="0">
     <!--
@@ -35,9 +35,20 @@
         4105 - Microsoft-Windows-PowerShell/Operational:    Script started (S)
         4106 - Microsoft-Windows-PowerShell/Operational:    Script ended (S)
     -->
+
     <Select Path="Microsoft-Windows-Sysmon/Operational">
         *[System[(EventID=1)] and EventData[Data[@Name='OriginalFileName'] and (Data='PowerShell.EXE')]]
     </Select>
+
+    <!-- Comment: 
+        - [!] Module Logging (4103) logs every parameter passed to any module. This can risk the confidentiality
+          of sensitive credentials and API keys if not handled appropiately.
+        - [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately.
+          ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
+        - [!] Script started (4105) and Script ended (4106) are highly verbose events, but they can help corelate
+          the precise moments in time when a script started and ended. This is very useful when long-running scripts
+          are being used in the environment.
+    -->
     <Select Path="Microsoft-Windows-PowerShell/Operational">
         *[System[(EventID=4103 or EventID=4104 or EventID=4105 or EventID=4106)]]
     </Select>

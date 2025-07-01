@@ -1,4 +1,4 @@
-# Query Metadata Schema (QUERY.XML)
+# Query Metadata Schema 1.0
 
 This document describes the standardized schema for `QUERY.XML` metadata files used in this project. These XML files encapsulate structured information about security detection queries, making them portable, versioned, and auditable.
 
@@ -142,7 +142,7 @@ Microsoft Windows follows a standard audit policy of categories and subcategorie
 ## RequiresAudit and AuditSettings fields
 
 ```diff
-- Future implementation
+- Future implementation for security automation.
 ```
 
 The `RequiresAudit` and `RequiredSettings` fields will allow the user to decide if they want to enable required settings and configure them automatically. 
@@ -152,7 +152,7 @@ Under `RequiredSettings`, the allowed fields are `GroupPolicy` for Group Policy 
 
 ## The Query Event Metadata Schema (EVT)
 
-The EVT schema is another section of the metadata information of a `QUERY.XML` file. The Event Metadata provides granular information of the queried events, including the list of event ids, channel, description, and event type (Success and Failure).
+The EVT schema is another section of the metadata information of a `QUERY.XML` file. The Event Metadata provides granular information of each event in the query, including the event ids, channel per event, description of the event, and event types (Success and/or Failure).
 
 ```XML
 <!--
@@ -163,5 +163,31 @@ The EVT schema is another section of the metadata information of a `QUERY.XML` f
 ```
 
 ```diff
-- Still under development
+- Currently, the EVT Schema is not in use, but it will be necessary for the future implementation of RequiresAudit and AuditSettings fields. Nonetheless, to ensure consistency and well documented queries, scripts under this repository will enforce that each event in each Select or Suppress element is properly commented in the EVT schema.
 ```
+
+### Comment blocks
+
+You can include comment blocks above any Select or Suppress element. Comment blocks provide information about the events or query logic. Below in an example:
+
+```XML
+<!-- Comment:
+- [!] Module Logging (4103) logs every parameter passed to any module. This can risk the confidentiality
+      of sensitive credentials and API keys if not handled appropiately.
+- [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately.
+      ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
+- [!] Script started (4105) and Script ended (4106) are highly verbose events, but they can help corelate
+      the precise moments in time when a script started and ended. This is very useful when long-running scripts
+      are being used in the environment.
+-->
+<Select Path="Microsoft-Windows-PowerShell/Operational">
+    *[System[(EventID=4103 or EventID=4104 or EventID=4105 or EventID=4106)]]
+</Select>
+```
+
+Comment blocks follow a very flexible and easy syntax. This syntax is important so that the comments can be processed correctly by the scripts under this repository.
+
+1. A comment block starts with `<!-- Comment:`, in one line.
+2. Each comment is separated by hyphens (`-`), similar to YAML syntax.
+3. At the begginning of each comment, you can add the type of message. `[!]` is for important messages, and `[*]` for general comments. The 'importance' or severity of a message is subjective. If not included, `[*]` is assumed.
+4. After the type of message symbol, you can type your message.
