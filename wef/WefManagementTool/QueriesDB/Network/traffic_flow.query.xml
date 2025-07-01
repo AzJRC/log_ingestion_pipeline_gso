@@ -1,0 +1,66 @@
+<!--
+    MetaSchemaVersion:  1.0
+    QueryName:          Traffic Flow
+    Intent:
+        - Primary:      Network
+    Platform:           WIN8, WIN10, WIN2012, WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server, Workstation
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    Reference:
+        - Resource:     Github/wef-guidance
+        - Resource:     URL/https://github.com/Security-Experts-Community/wef-guidance/blob/main/EventSubscriptionsCollections/EventCategoriesBased/%5BQuery%5D%2010-Network.xml       
+    QueryVersion:       1.0
+    QueryDate:          2025-07-01
+    Verbosity:          Medium, Medium, High
+    Tag:                Category/Object Access 
+    Tag:                Subcategory/Filtering Platform Connection
+    Tag:                Subcategory/Filtering Platform Packet Drop
+    Tag:                Action/Packet Drop, Network Filtering
+    Tag:                Source/Windows Events, Windows Sysmon
+    RequiresAudit:      Yes
+    RequiredSettings:
+        - AuditPolicy:  Object Access/Filtering Platform Connection
+        - AuditPolicy:  Object Access/Filtering Platform Packet Drop
+    Description:        Monitors allowed and blocked network traffic on Windows systems for outbound connections, connection approvals, binds, and packet filtering actions.
+-->
+
+<Query Id="0">
+    <!-- 
+        3 - Microsoft-Windows-Sysmon/Operational:      Network connection (-)
+    -->
+    <Select Path="Microsoft-Windows-Sysmon/Operational">*[System[(EventID=3)]]</Select>
+</Query>
+<Query Id="0">
+    <!-- 
+        3 - Microsoft-Windows-Sysmon/Operational:      Network connection (-)
+        5156 - Security:    The Windows Filtering Platform has permitted a connection (S)
+        5154 - Security:    The Windows Filtering Platform has permitted an application or service to listen on a port for incoming connections (S)
+        5158 - Security:    The Windows Filtering Platform has permitted a bind to a local port (S)
+    -->
+    <Select Path="Microsoft-Windows-Sysmon/Operational">*[System[(EventID=3)]]</Select>
+    <Select Path="Security">*[System[EventID=5031 or EventID=5146 or EventID=5147 or (EventID &gt;= 5150 and EventID &lt;= 5159)]]</Select>
+</Query>
+<Query Id="0">
+    <!-- 
+        3 - Microsoft-Windows-Sysmon/Operational:   Network connection (-)
+        5156 - Security:    The Windows Filtering Platform has permitted a connection (S)
+        5154 - Security:    The Windows Filtering Platform has permitted an application or service to listen on a port for incoming connections (S)
+        5158 - Security:    The Windows Filtering Platform has permitted a bind to a local port (S)
+        5031 - Security:    The Windows Firewall Service blocked an application from accepting incoming connections on the network (F)
+        5146 - Security:    The Windows Filtering Platform blocked a packet (F)
+        5147 - Security:    A more restrictive Windows Filtering Platform filter has blocked a packet (F)
+        5150 - Security:    The Windows Filtering Platform blocked a packet (S)
+        5151 - Security:    A more restrictive Windows Filtering Platform filter has blocked a packet (F)
+        5152 - Security:    The Windows Filtering Platform blocked a packet
+        5153 - Security:    A more restrictive Windows Filtering Platform filter has blocked a packet (S)
+        5157 - Security:    The Windows Filtering Platform has blocked a connection (F)
+        5155 - Security:    The Windows Filtering Platform has blocked an application or service from listening on a port for incoming connections (F)
+        5159 - Security:    The Windows Filtering Platform has blocked a bind to a local port (F)
+    -->
+    <Select Path="Microsoft-Windows-Sysmon/Operational">*[System[(EventID=3)]]</Select>
+    <Select Path="Security">*[System[EventID=5031 or EventID=5146 or EventID=5147 or (EventID &gt;= 5150 and EventID &lt;= 5159)]]</Select>
+</Query>

@@ -29,7 +29,7 @@
 <Query Id="0">
     <!--
         MetaSchemaVersion:  EVT-1.0
-        1 - Sysmon:                                         Process creation (-)
+        1 - Microsoft-Windows-Sysmon/Operational:           Process creation (-)
         4103 - Microsoft-Windows-PowerShell/Operational:    Module logging (S)
         4104 - Microsoft-Windows-PowerShell/Operational:    ScriptBlock logging (S)
         4105 - Microsoft-Windows-PowerShell/Operational:    Script started (S)

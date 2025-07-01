@@ -39,5 +39,3 @@
     -->
     <Select Path="Security">*[System[(EventID=5140 or EventID=5142 or EventID=5143 or EventID=5144 or EventID=5168)]]</Select>
 </Query>
-
-
