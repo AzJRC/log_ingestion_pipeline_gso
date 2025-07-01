@@ -1,0 +1,39 @@
+<!--
+    MetaSchemaVersion:  1.0
+    QueryName:          Windows Logon Activity
+    Intent:
+        - Primary:      Identity and Access
+        - Secondary:    Logon, Logoff
+    Platform:           WIN7, WIN8, WIN10, WIN2008, WIN2012 WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server, Workstation
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    QueryVersion:       1.0
+    QueryDate:          2025-07-01
+    Verbosity:          Low
+    Tag:                Technique/T1078 
+    Tag:                Category/Logon Logoff
+    Tag:                Subcategory/Logon, Logoff
+    Tag:                Action/Authentication, Login
+    Tag:                Source/Windows Events
+    RequiresAudit:      No
+    Description:        Monitors standard Windows logon and logoff activity, including successful, failed, and explicit credential use across sessions.
+-->
+<Query Id="0">
+    <!--
+        MetaSchemaVersion:  EVT-1.0
+        4624 - Security:    An account was successfully logged on (S)
+        4625 - Security:    An account failed to log on (F)
+        4648 - Security:    A logon was attempted using explicit credentials (S)
+        4634 - Security:    An account was logged off (S)
+        4778 - Security:    A session was reconnected to a Window Station (S)
+        4779 - Security:    A session was disconnected from a Window Station (S)
+    -->
+
+    <Select Path="Security">
+        *[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4634 or EventID=4778 or EventID=4779)]]
+    </Select>
+</Query>
