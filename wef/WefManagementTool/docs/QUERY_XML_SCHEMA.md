@@ -69,6 +69,8 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 | `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
 | `Reference` 	| External documentation or advisories. 	| - 	|
 | `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY/MM/DD` or `YYYY-MM-DD`. 	| 2025-07-23 	|
+| `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. 	| `Low`, `Medium` 	|
+| `Requirements` 	| List software or applications needed for the query to request events successfully. 	| `Windows Sysmon` 	|
 | `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
 | `RequiresAudit` 	| Indicates if this query needs additional auditing enabled. [Upcoming feature] 	| - 	|
 | `RequiredSettings` 	| Lists audit policy or configuration settings needed for full effectiveness. [Upcoming feature] 	| - 	|
@@ -80,7 +82,7 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 
 Tags use Key/Value pairs to provide semantic categorization of each query. This enables precise filtering, automated alert prioritization, and consistent documentation.
 
-You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`) to indicate that the query applies to several related items. Keep in mind that the `Category` and `Criticality` fields should have only one value.
+You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`) to indicate that the query applies to several related items. Keep in mind that the `Criticality` field should have only one value.
 
 | Key 	| Purpose 	| Example value 	|
 |---	|---	|---	|
@@ -89,6 +91,7 @@ You can declare multiple values for the same key (e.g. `Technique/T1558, T1110`)
 | `Subcategory` 	| Maps to Microsoft's detailed audit policy subcategories, providing granular context[^2]. 	| `Subcategory/File Share` 	|
 | `Action` 	| Describes the specific monitored behavior or operation, often reflecting a verb-like activity (e.g. "File Sharing"), a well-known adversary tactic (e.g. "Kerberoasting"), or a generic security operation (e.g. "Authentication"). 	| `Action/File Sharing`, `Action/Kerberoasting` 	|
 | `Criticality` 	| Indicates the expected impact level of the detection using the supported values `Low`, `Medium`, or `High`. 	| `Criticality/Medium` 	|
+| `Source` 	| Indicates the source of the event. 	| `Source/Sysmon`, `Source/Windows Events` 	|
 | `Misc` 	| Used for additional context such as protocols, infrastructure elements, or environment specifics. 	| `Misc/SMB, ADDS` 	|
 
 [^2]: Run `auditpol /get /category:*` to see all categories and subcategories.
@@ -142,4 +145,23 @@ Microsoft Windows follows a standard audit policy of categories and subcategorie
 - Future implementation
 ```
 
-The `RequiresAudit` and `AuditSettings` field will allow the user to decide if they want to enable required settings automatically.
+The `RequiresAudit` and `RequiredSettings` fields will allow the user to decide if they want to enable required settings and configure them automatically. 
+
+Under `RequiredSettings`, the allowed fields are `GroupPolicy` for Group Policy related settings, `AuditPolicy` for Audit Policy related settings, and `Registry` for Registry related settings.
+
+
+## The Query Event Metadata Schema (EVT)
+
+The EVT schema is another section of the metadata information of a `QUERY.XML` file. The Event Metadata provides granular information of the queried events, including the list of event ids, channel, description, and event type (Success and Failure).
+
+```XML
+<!--
+    MetaSchemaVersion:  EVT-1.0
+    4624 - Security:    An account was successfully logged on (S, F)
+    1 - Sysmon:         Process creation (-)
+-->
+```
+
+```diff
+- Still under development
+```
