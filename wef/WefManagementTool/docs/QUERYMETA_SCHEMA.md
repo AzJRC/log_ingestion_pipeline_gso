@@ -171,14 +171,11 @@ The EVT schema is another section of the metadata that you **MUST** include in a
 You can include comment blocks above any Select or Suppress element. Comment blocks provide information about the events or query logic. Below in an example:
 
 ```XML
-<!-- Comment:
-- [!] Module Logging (4103) logs every parameter passed to any module. This can risk the confidentiality
-      of sensitive credentials and API keys if not handled appropiately.
-- [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately.
-      ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
-- [!] Script started (4105) and Script ended (4106) are highly verbose events, but they can help corelate
-      the precise moments in time when a script started and ended. This is very useful when long-running scripts
-      are being used in the environment.
+<!-- Comment: 
+    [!] Module Logging (4103) logs every parameter passed to any module: Confidentiality and credential leaking risk.
+    [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately. 
+    [!] ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
+    [!] (4105) and (4106) are highly verbose events but they can corelate the precise moments when a script started and ended.
 -->
 <Select Path="Microsoft-Windows-PowerShell/Operational">
     *[System[(EventID=4103 or EventID=4104 or EventID=4105 or EventID=4106)]]
@@ -188,9 +185,8 @@ You can include comment blocks above any Select or Suppress element. Comment blo
 Comment blocks follow a very flexible and easy syntax. This syntax is important so that the comments can be processed correctly by the scripts in this repository.
 
 1. A comment block starts with `<!-- Comment:` (in one line).
-2. Each comment is separated by hyphens (`-`), similar to YAML syntax.
-3. At the begginning of each comment, you can add the type of message. `[!]` is for important messages, and `[*]` for general comments. The 'importance' or severity of a message is subjective. If not included, `[*]` is assumed.
-4. After the type of message symbol, you can type your message.
+2. At the begginning of each comment, you **MUST** add the type of the comment. `[!]` is for important messages, and `[*]` for general comments. The 'importance' or severity of a message is subjective. Comments are also one-liners. There is no limit in length, but it is recommended to keep the commentaries as short as possible.
+3. Close the comment block in the next line.
 
 ## Complementarity and Coverage Queries
 

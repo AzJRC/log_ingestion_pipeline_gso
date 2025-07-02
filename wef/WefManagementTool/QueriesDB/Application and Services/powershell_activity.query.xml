@@ -41,13 +41,10 @@
     </Select>
 
     <!-- Comment: 
-        - [!] Module Logging (4103) logs every parameter passed to any module. This can risk the confidentiality
-          of sensitive credentials and API keys if not handled appropiately.
-        - [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately.
-          ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
-        - [!] Script started (4105) and Script ended (4106) are highly verbose events, but they can help corelate
-          the precise moments in time when a script started and ended. This is very useful when long-running scripts
-          are being used in the environment.
+        [!] Module Logging (4103) logs every parameter passed to any module. Confidentiality and credential leaking risk.
+        [!] ScriptBlock Logging (4104) is highly verbose and can fill log files if not handled appropiately. 
+        [!] ScriptBlock Logging will not log sensitive parameters as long as they are not included in the scripts.
+        [!] (4105) and (4106) are highly verbose events but they can corelate the precise moments when a script started and ended.
     -->
     <Select Path="Microsoft-Windows-PowerShell/Operational">
         *[System[(EventID=4103 or EventID=4104 or EventID=4105 or EventID=4106)]]
