@@ -4,7 +4,36 @@ using namespace system.collections.generic
 # QUERY META SCHEMA
 #
 
-# Custom type definitions
+enum MetaSchemaFields {
+    MetaSchemaVersion
+    QueryName
+    Intent
+    Platform
+    SecurityProfile
+    Author
+    Reference
+    QueryVersion
+    QueryDate
+    Verbosity
+    Requirements
+    Tag
+    RequiresAudit
+    RequiredSettings
+    Description
+}
+
+enum MetaSchemaIntentFields {
+    Primary
+    Secondary
+}
+
+enum MetaSchemaAuthorFields {
+    Name
+    Alias
+    Resource
+}
+
+
 enum SupportedPlatforms {
     WIN7
     WIN8
@@ -218,7 +247,7 @@ class RequiredSettings {
 
 # Main class
 class QueryMetadataSchema {
-    static [string] $SCHEMA_META_VERSION = 1.0
+    static [string] $SCHEMA_META_VERSION = '1.0'
 
     # Mandatory fields
     [ValidateNotNullOrEmpty()][string]$QueryName
@@ -257,6 +286,10 @@ class QueryMetadataSchema {
     }
 
     # Public Methods
+
+    [string]GetSchemaVersion() {
+        return [QueryMetadataSchema]::SCHEMA_META_VERSION
+    }
     
     [void]AddPlatforms([string]$rawPlatformString) {
         if (-not $this.SupportedPlatforms) { $this.SupportedPlatforms = [list[SupportedPlatforms]]::new() }

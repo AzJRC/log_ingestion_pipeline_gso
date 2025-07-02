@@ -1,25 +1,44 @@
 
 using namespace system.collections.generic
 
-$SUPPORTED_SCHEMA_VERSION = 1.0
-$SUPPORTED_EVENT_SCHEMA_VERSION = 1.0
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'Utilities\Get-MicrosoftQueryElementSchema.ps1')
+# class QueryTypeElement {}
+# class QueryElement {}
+# class QueryListElement {}
+
+Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'Utilities\Get-WMTQueryMetadataSchema.ps1')
+# enum MetaSchemaIntentFields
+# enum MetaSchemaAuthorFields
+# enum MetaSchemaFields
+# class QueryMetadataSchema {}
 
 function Build-MetadataQuery {
     param(
         [string]$RootDatabase = (Join-Path -Path $PSScriptRoot -ChildPath '..\QueriesDB' | Resolve-Path)
     )
 
-    $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
+    $queryXmlFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
+    foreach ($queryXmlFile in $queryXmlFiles) {
+        $RawQueryXmlLines = Get-Content $queryXmlFile.FullName
+        [xml]$QueryXml = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n$RawQueryXmlLines"
 
-    foreach ($XmlQueryFile in $XmlQueryFiles) {
-        $RawXmlLines = Get-Content $XmlQueryFile.FullName
+        # 0. Validate Schema Version
+        $validQueryXml = $false
+        $match = $RawQueryXmlLines | Where-Object {
+            # The cryptic script ($_ -split ':', 2)[1].Trim() is the value '1.0' in the string 'MetaSchemaVersion: 1.0'
+            $_ -match 'MetaSchemaVersion' -and (($_ -split ':', 2)[1].Trim() -eq [QueryMetadataSchema]::SCHEMA_META_VERSION)
+        } | Select-Object -First 1
+        if ($match) { $validQueryXml = $true }
 
-        # 1. Parse comment block metadata
-        $Meta = Parse-QueryMetadata -Lines $RawXmlLines
+        if (-not $validQueryXml) {
+            throw "[-] Invalid QueryXmlFile MetaSchemaVersion. Supported version is: $([QueryMetadataSchema]::SCHEMA_META_VERSION)"
+        }
 
-        # 2. Parse <Query> elements
-        [xml]$Xml = $RawXmlLines -join "`n"
-        $QueryElements = Parse-QueryXmlElements -Xml $Xml
+        # 1. Parse <Query> elements
+        $QueryElements = Parse-QueryXmlElements -Xml $QueryXml
+
+        # 2. Parse comment block metadata
+        $Meta = Parse-QueryMetadata -Lines $RawQueryXmlLines
 
         # 3. Compose final metadata object
         $JsonObject = [ordered]@{
@@ -38,24 +57,25 @@ function Build-MetadataQuery {
         }
 
         # 4. Write META.JSON
-        $OutputJsonPath = $XmlQueryFile.FullName -replace "query.xml", "meta.json"
-        $JsonObject | ConvertTo-Json -Depth 10 | Out-File $OutputJsonPath -Encoding UTF8
+        continue    # [Stop] Temporary 
+        $OutputJsonPath = $queryXmlFile.FullName -replace "query.xml", "meta.json"
+        $JsonObject | ConvertTo-Json -Depth 5 | Out-File $OutputJsonPath -Encoding UTF8
     }
 }
 
-Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'Utilities\Get-MicrosoftQueryElementSchema.ps1')
-# class QueryTypeElement {}
-# class QueryElement {}
-# class QueryListElement {}
+function Parse-QueryXmlElements {
+    param(
+        [xml]$Xml
+    )
+}
 
-Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'Utilities\Get-WMTQueryMetadataSchema.ps1')
-# class QueryMetadataSchema {}
 function Parse-QueryMetadata {
     param(
-        [list]$Lines
+        [list[string]]$Lines
     )
 
     $Lines | ForEach-Object {
-        
+        $currLine = $_
+
     }
 }
