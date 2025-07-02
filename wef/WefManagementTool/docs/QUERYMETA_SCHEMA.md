@@ -18,7 +18,7 @@ Each `QUERY.XML` must include a comment block following this structure:
     QueryName:          File Sharing Activity
     Intent:
         - Primary:      Security and Auditing
-        - Secondary:    Network
+        - Secondary:    Malware
     Platform:           WIN7, WIN10, WIN2016, WIN2019, WIN2022
     SecurityProfile:    Member Server, Workstation
     Author:
@@ -48,7 +48,7 @@ Each `QUERY.XML` must include a comment block following this structure:
 -->
 ```
 
-## Fields fields
+## Fields
 
 The following table enlists the mandatory fields of a `QUERY.XML` file.
 
@@ -64,12 +64,12 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 
 | Field 	| Description 	| Example value	|
 |---	|---	|---	|
-| `Intent.Secondary` 	| More granular category, open to interpretation. We suggest using `auditpol` keywords or Mitre Att&ck alike terms. You can declare more than one secondary intent using commas[^1].	| `Account Management, Kerberos Operation` 	|
+| `Intent.Secondary` 	| More granular category, open to interpretation. We suggest using `auditpol` keywords or Mitre Att&ck alike terms. You can declare more than one secondary intent using commas[^1]. You can also use `Intent.Primary` terms if you believe that the query exists between two intent categories.	| `Account Management, Kerberos Operation` 	|
 | `Platform` 	| List of operating systems this query applies to. Allowed values include `WIN7`, `WIN8`, `WIN10`, `WIN11`, `WIN2008`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022`, and `WIN2025`. 	| `WIN8`, `WIN10`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022` 	|
 | `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
-| `Reference` 	| External documentation or advisories. 	| - 	|
+| `Reference` 	| External documentation or advisories. Read the section [Author and Reference structure](#author-and-reference-structure) to use this field effectively.	| - 	|
 | `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY-MM-DD`. 	| 2025-07-23 	|
-| `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. If the `QUERY.XML` file contains multiple complementary queries (with different IDs), this field must be set to the highest verbosity level among them. If the file contains alternative coverage queries (with the same ID), this field must list the verbosity levels of each option in order of declaration, separated by commas. 	| `High`, `Low, Medium` 	|
+| `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. If the `QUERY.XML` file contains **complementary queries** (with different IDs), this field must be set to the highest verbosity level among them. If the file contains **alternative coverage queries** (with the same ID), this field must list the verbosity levels of each option in order of declaration, separated by commas. You can read more about complementary and coverage queries in [Complementarity and Coverage Queries](#complementarity-and-coverage-queries) 	| `High`, `Low, Medium` 	|
 | `Requirements` 	| List software or applications needed for the query to request events successfully. 	| `Windows Sysmon` 	|
 | `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
 | `RequiresAudit` 	| Indicates if this query needs additional auditing enabled. [Upcoming feature] 	| - 	|
@@ -150,9 +150,9 @@ The `RequiresAudit` and `RequiredSettings` fields will allow the user to decide 
 Under `RequiredSettings`, the allowed fields are `GroupPolicy` for Group Policy related settings, `AuditPolicy` for Audit Policy related settings, and `Registry` for Registry related settings.
 
 
-## The Query Event Metadata Schema (EVT)
+## The Query Event (Sub)Metadata Schema (EVT)
 
-The EVT schema is another section of the metadata information of a `QUERY.XML` file. The Event Metadata provides granular information of each event in the query, including the event ids, channel per event, description of the event, and event types (Success and/or Failure).
+The EVT schema is another section of the metadata that you **MUST** include in a `QUERY.XML` file. The Event Metadata provides granular information of each event in the query, including the event ids, channel per event, description of the event, and event types (Success and/or Failure).
 
 ```XML
 <!--
@@ -185,31 +185,32 @@ You can include comment blocks above any Select or Suppress element. Comment blo
 </Select>
 ```
 
-Comment blocks follow a very flexible and easy syntax. This syntax is important so that the comments can be processed correctly by the scripts under this repository.
+Comment blocks follow a very flexible and easy syntax. This syntax is important so that the comments can be processed correctly by the scripts in this repository.
 
-1. A comment block starts with `<!-- Comment:`, in one line.
+1. A comment block starts with `<!-- Comment:` (in one line).
 2. Each comment is separated by hyphens (`-`), similar to YAML syntax.
 3. At the begginning of each comment, you can add the type of message. `[!]` is for important messages, and `[*]` for general comments. The 'importance' or severity of a message is subjective. If not included, `[*]` is assumed.
 4. After the type of message symbol, you can type your message.
 
-## Multiple Query Elements (Verbosity vs Complementarity)
+## Complementarity and Coverage Queries
 
 A `QUERY.XML` file may contain multiple `<Query>` elements.
 
-- **Same `Id` repeated**: Signals alternative verbosity levels or scoping options. The user (or automation) can select which variant to import.
-- **Different `Id`s**: Treated as complementary detection components that are imported together under the same metadata intent.
+- **Same `Id` property**: Signals alternative verbosity levels or scoping options (coverage). The user (or automation) can select which variant to import. The [`Verbosity`](#fields) field in the metadata schema is used to identify the verbosity level of each query.
+- **Different `Id` property**: Treated as complementary detection components that are imported together under the same metadata intent.
 
-The `Id` property in the `QUERY.XML` file ensures uniqueness when importing multiple queries into a combined `<QueryList>` element, avoiding conflicts even when merging files.
+The `Id` property in the `QUERY.XML` file do not represent the actual `Id`s of the queries in the final `<QueryList>` element. These are used during the preprocessing step before the import. You can safely type any number; however, it is highly recommended to start the `Id`s from the value 0. Repeat the same `Id` if you want to create a **coverage queries**, or use different `Id`s is you want to create **complementary queries**.
 
-Use different IDs when:
+### Cheatsheet
 
-- Each `<Query>` covers a distinct but complementary aspect of the same security concern.
+Use complementary queries (different IDs) when:
+
+- Each `<Query>` in the `QUERY.XML` file covers a distinct but complementary aspect of the same security concern.
 - You intend to always import both queries when pulling the `QUERY.XML`.
-- They are logically separate detections, each with unique value.
 
-On the otherhand, use the same IDs when:
+On the otherhand, use coverage queries (same IDs) when:
 
-- There are different granularities of the same detection concept.
+- There are different granularities of the same detection concept or intent.
 - The user (or tool) will select only one variant to import, based on performance or coverage needs.
 
-Additionally, keep in mind that using different IDs still allows you to adjust the coverage as needed by simply disabling or removing any query ID that is not required.
+Additionally, keep in mind that using complementary queries (different IDs) still allows you to adjust the coverage as needed by simply disabling or removing any query ID that is not required.
