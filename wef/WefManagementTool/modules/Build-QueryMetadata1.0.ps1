@@ -62,20 +62,3 @@ function Build-MetadataQuery {
         $JsonObject | ConvertTo-Json -Depth 5 | Out-File $OutputJsonPath -Encoding UTF8
     }
 }
-
-function Parse-QueryXmlElements {
-    param(
-        [xml]$Xml
-    )
-}
-
-function Parse-QueryMetadata {
-    param(
-        [list[string]]$Lines
-    )
-
-    $Lines | ForEach-Object {
-        $currLine = $_
-
-    }
-}
