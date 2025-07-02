@@ -267,30 +267,92 @@ class QueryMetadataSchema {
     [RequiredSettings]$RequiredSettings
     [string]$Description
 
-    # Constructor
+    # Constructors
     QueryMetadataSchema([string]$QueryName, [string]$PrimaryIntent, [string]$AuthorName, [string]$AuthorAlias, [string]$QueryVersion) {
-        if ($null -eq $AuthorName -and $null -eq $AuthorAlias) { throw "[!] Missing at least one Author parameter." }
-        $this.QueryName = $QueryName.Trim()
-        $this.Intent = [IntentField]::new($PrimaryIntent)
-
-        $Author = [AuthorOrReferenceField]::new()
-        if ($AuthorName) {
-            $Author.SetAuthorName($AuthorName)
+        if ($null -eq $AuthorName -and $null -eq $AuthorAlias) {
+            throw "[!] Missing at least one Author parameter."
         }
-        if ($AuthorAlias) {
-            $Author.SetAuthorAlias($AuthorAlias)
-        }
-
-        $this.AuthorField = $Author
-        $this.QueryVersion = $QueryVersion
+        $this.SetQueryName($QueryName)
+        $this.SetPrimaryIntent($PrimaryIntent)
+        $this.SetAuthor($AuthorName, $AuthorAlias)
+        $this.SetQueryVersion($QueryVersion)
     }
 
-    # Public Methods
+    QueryMetadataSchema() {
+        $this.SetQueryName("Temporary Values")
+        $this.SetPrimaryIntent("Application and Services")
+        $this.SetAuthor("John Doe", $null)
+        $this.SetQueryVersion("0.0")  
+    }
 
+    # Getters and Setters
+
+    ## SchemaVersion
     [string]GetSchemaVersion() {
         return [QueryMetadataSchema]::SCHEMA_META_VERSION
     }
-    
+
+    ## QueryName
+    [void] SetQueryName([string]$name) {
+        $this.QueryName = $name.Trim()
+    }
+    [string] GetQueryName() {
+        return $this.QueryName
+    }
+
+    ## Intent (Primary)
+    [void] SetPrimaryIntent([string]$primaryIntent) {
+        $this.Intent = [IntentField]::new($primaryIntent.Trim())
+    }
+    [IntentField] GetIntent() {
+        return $this.Intent
+    }
+    [string] GetPrimaryIntent() {
+        return $this.Intent.GetPrimaryIntent()
+    }
+    [list[string]] GetSecondaryIntent() {
+        return $this.Intent.GetSecondaryIntent()
+    }
+
+    ## Author (Name or Alias)
+    [void] SetAuthor([string]$authorName, [string]$authorAlias) {
+        $author = [AuthorOrReferenceField]::new()
+        if ($authorName) { $author.SetAuthorName($authorName.Trim()) }
+        if ($authorAlias) { $author.SetAuthorAlias($authorAlias.Trim()) }
+        $this.AuthorField = $author
+    }
+    [AuthorOrReferenceField] GetAuthor() {
+        return $this.AuthorField
+    }
+
+    [void] AddAuthorName([string]$authorName) {
+        $this.AuthorField.SetAuthorAlias($authorName.Trim())
+    }
+    [string] GetAuthorName() {
+        return $this.AuthorField.AuthorName
+    }
+
+    [void] AddAuthorAlias([string]$authorAlias) {
+        $this.AuthorField.SetAuthorAlias($authorAlias.Trim())
+    }
+    [string] GetAuthorAlias() {
+        return $this.AuthorField.AuthorAlias
+    }
+
+    [void] AddAuthorResource([string]$resource) {
+        $this.AuthorField.AddAuthorResource($resource)
+    }
+    # [TODO] GetAuthorResources
+
+    ## QueryVersion
+    [void] SetQueryVersion([string]$version) {
+        $this.QueryVersion = $version.Trim()
+    }
+    [string] GetQueryVersion() {
+        return $this.QueryVersion
+    }
+
+    ## Platforms
     [void]AddPlatforms([string]$rawPlatformString) {
         if (-not $this.SupportedPlatforms) { $this.SupportedPlatforms = [list[SupportedPlatforms]]::new() }
 
@@ -312,6 +374,7 @@ class QueryMetadataSchema {
         return ($this.SupportedPlatforms | ForEach-Object { $_.ToString() })
     }
 
+    ## SecurityProfiles
     [void]AddSecurityProfile([string]$rawSecurityProfiles) {
         if (-not $this.SecurityProfiles) { $this.SecurityProfiles = [list[SecurityProfiles]]::new() }
 
@@ -335,19 +398,7 @@ class QueryMetadataSchema {
         return $this.SecurityProfiles | ForEach-Object { $_.ToString() }
     }
 
-    [void] AddAuthorName([string]$authorName) {
-        $this.AuthorField.SetAuthorAlias($authorName.Trim())
-    }
-    [void] AddAuthorAlias([string]$authorAlias) {
-        $this.AuthorField.SetAuthorAlias($authorAlias.Trim())
-    }
-    [void] AddAuthorResource([string]$resource) {
-        $this.AuthorField.AddAuthorResource($resource)
-    }
-    [AuthorOrReferenceField] GetAuthor() {
-        return $this.AuthorField
-    }
-
+    ## References
     [void] AddReference([string]$referenceName, [string]$referenceAlias, [list[string]]$resources) {
         if (-not $this.References) { $this.References = [list[AuthorOrReferenceField]]::new() }
         if (-not $referenceName -and -not $referenceAlias -and -not $resources) { throw "Invalid reference. You must provide at least one reference parameter." }
@@ -365,6 +416,7 @@ class QueryMetadataSchema {
         return $this.References
     }
 
+    ## QueryDate
     [void] SetQueryDate($rawDate) {
         # Date format is YYYY-MM-DD from raw QUERY.XML file
         if (-not $rawDate -or ($rawDate.Trim() -notmatch "^\d{4}-\d{2}-\d{2}$")) {
@@ -379,6 +431,7 @@ class QueryMetadataSchema {
         return ($this.QueryDate -split '-', 3)
     }
 
+    ## Verbosity
     [void] SetVerbosity([string]$rawVerbosity) {
         # Raw verbosity structure is a string of Levels separated by commas.
         # e.g. Low, Medium, High    - Coverage query
@@ -400,6 +453,7 @@ class QueryMetadataSchema {
         return ($this.Verbosity | ForEach-Object { $_.ToString() })
     }
 
+    ## Requirements
     [void] SetRequirements([string]$requirement) {
         # Raw requirements structure is a string of text values separated by commas.
         # E.g. Windows Sysmon, Other requirement    
@@ -414,6 +468,7 @@ class QueryMetadataSchema {
         return $this.Requirements
     }
 
+    ## Tags
     [void] AddTag([string]$rawTag) {
         # A raw tag from a XML.QUERY file is a list of string in key/values pair format.
         # There can be several values in a key/values pair (key/value1, value2, valueN)
@@ -442,13 +497,14 @@ class QueryMetadataSchema {
             })
     }
     
+    ## RequiresAudit
     [void] SetRequiresAudit([string]$value) {
         try {
             $this.RequiresAudit = [YesNo]$value
         }
         catch {
             $this.RequiresAudit = [YesNo]'No'
-            Write-Host "[!] Unknown value for RequiresAudit: $value. Field will default to 'No'."
+            Write-Host "[!] Unknown value for RequiresAudit: '$value'. Must be Yes or No. Defaulting to 'No'." -ForegroundColor Yellow
         }
     }
     [string] GetRequiresAuditString() {
@@ -463,6 +519,7 @@ class QueryMetadataSchema {
         }
     }
 
+    ## RequiredSettings
     [void] SetRequiredSettings([string]$rawRequiredSettings) {
         # [TODO] Future feature
         $this.RequiredSettings = [RequiredSettings]::new($rawRequiredSettings)
@@ -472,6 +529,7 @@ class QueryMetadataSchema {
         return $lines
     }
 
+    ## Description
     [void] SetDescription([string]$rawDescription) {
         $this.Description = $rawDescription
     }
@@ -479,10 +537,11 @@ class QueryMetadataSchema {
         return $this.Description
     }
 
+    # Public methods
+
     [string] ToString() {
         return "QueryName=$($this.QueryName) Intent=$($this.Intent.Primary) Platforms=[$($this.SupportedPlatforms -join ',')], TagsCount=$($this.Tags.Count)"
     }
-
 }
 
 #
@@ -501,13 +560,7 @@ class QueryEventMetadataSchema {
 
 function Test-QueryMetadataSchema {
     Write-Host "=== Building new QueryMetadataSchema ===" -ForegroundColor Cyan
-    $QMS = [QueryMetadataSchema]::new(
-        'Test Query',
-        'Application And Services',
-        'John Doe',
-        'Johnny',
-        '1.0'
-    )
+    $QMS = [QueryMetadataSchema]::new()
 
     #
     # Supported Platforms
@@ -618,4 +671,5 @@ function Test-QueryMetadataSchema {
     #
     Write-Host "`n--- Final Object Summary ---" -ForegroundColor Cyan
     $QMS | Format-List
+    $QMS.ToString()
 }
