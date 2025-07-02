@@ -16,6 +16,7 @@
     QueryVersion:       1.0
     QueryDate:          2025-07-01
     Verbosity:          Medium, Medium, High
+    Requirements:       Windows Sysmon
     Tag:                Category/Object Access 
     Tag:                Subcategory/Filtering Platform Connection
     Tag:                Subcategory/Filtering Platform Packet Drop

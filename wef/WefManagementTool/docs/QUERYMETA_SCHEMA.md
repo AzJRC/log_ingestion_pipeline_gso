@@ -57,7 +57,7 @@ The following table enlists the mandatory fields of a `QUERY.XML` file.
 | `MetaSchemaVersion` 	| Version of this metadata schema. Ensures backward compatibility and programmability of scripting tools. 	|
 | `QueryName` 	| Human-readable descriptive name of the query. 	|
 | `Intent.Primary` 	| Intent of the query. Must be one of the following allowed values: `Security and Auditing`, `Application and Services`, `Identity and Access`, `System`, `Network`. 	|
-| `Author` 	| Structured information including the name, alias, and related resources of the person that created a query. 	|
+| `Author` 	| Structured information including at least name or alias of the person that created a query. 	|
 | `QueryVersion` 	| Version number in format `X.Y`. Minor changes involve modifying or fixing already declared Select or Suppress tags that do not change the intent of the query. Major changes involve adding new Select or Suppress queries or changes that affect the intent of the query. 	|
 
 The following table enlists the non mandatory (but strictly recommended) fields of a QUERY.XML file.
@@ -65,10 +65,10 @@ The following table enlists the non mandatory (but strictly recommended) fields 
 | Field 	| Description 	| Example value	|
 |---	|---	|---	|
 | `Intent.Secondary` 	| More granular category, open to interpretation. We suggest using `auditpol` keywords or Mitre Att&ck alike terms. You can declare more than one secondary intent using commas[^1].	| `Account Management, Kerberos Operation` 	|
-| `Platform` 	| List of operating systems this query applies to. Allowed values include `WIN7`, `WIN8`, (`WIN8.1`), `WIN10`, `WIN11`, `WIN2008`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022`, and `WIN2025`. 	| `WIN8`, `WIN10`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022` 	|
+| `Platform` 	| List of operating systems this query applies to. Allowed values include `WIN7`, `WIN8`, `WIN10`, `WIN11`, `WIN2008`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022`, and `WIN2025`. 	| `WIN8`, `WIN10`, `WIN2012`, `WIN2016`, `WIN2019`, `WIN2022` 	|
 | `SecurityProfile` 	| Roles or asset types relevant for the query. Allowed values include `Domain Controller`, `Member Server`, `Workstation` or `Other`. 	| `Workstation`, `Member Server` 	|
 | `Reference` 	| External documentation or advisories. 	| - 	|
-| `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY/MM/DD` or `YYYY-MM-DD`. 	| 2025-07-23 	|
+| `QueryDate` 	| Date of creation or last revision. Dates must use the format `YYYY-MM-DD`. 	| 2025-07-23 	|
 | `Verbosity` 	| Declares the verbosity level of the query. Allowed values include `Low`, `Medium`, or `High`. If the `QUERY.XML` file contains multiple complementary queries (with different IDs), this field must be set to the highest verbosity level among them. If the file contains alternative coverage queries (with the same ID), this field must list the verbosity levels of each option in order of declaration, separated by commas. 	| `High`, `Low, Medium` 	|
 | `Requirements` 	| List software or applications needed for the query to request events successfully. 	| `Windows Sysmon` 	|
 | `Tag` 	| Multi-key taxonomy for advanced categorization. Read the section [Tag Structure](#tag-structure) to use this field effectively. 	| `Technique/T1234`, `Category/Object Access` 	|
