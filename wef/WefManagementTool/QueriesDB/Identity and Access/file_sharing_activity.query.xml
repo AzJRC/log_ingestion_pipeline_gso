@@ -18,14 +18,11 @@
         - Resource:     URL/https://github.com/mdecrevoisier/Windows-auditing-baseline
     QueryVersion:       1.0
     QueryDate:          2025-06-27
-    Tag:                Technique/T1021.002
-    Tag:                Technique/T1222.001
-    Tag:                Technique/T1187
+    Tag:                Technique/T1021.002, T1222.001, T1187
     Tag:                Category/Object Access
     Tag:                Subcategory/File Share
     Tag:                Action/Resource Sharing
-    Tag:                Misc/SMB
-    Tag:                Misc/Admin Shares
+    Tag:                Misc/SMB, Admin Shares
     RequiresAudit:      Yes
     RequiredSettings:
         - AuditPolicy:  Object Access/File Share
@@ -34,13 +31,11 @@
 <Query Id="0">
     <!--
         MetaSchemaVersion:      EVT-1.0
-        (5140 - Security):      A network share object was accessed (S,F)
-        (5142 - Security):      A network share object was added (S)
-        (5143 - Security):      A network share object was modified (S)
-        (5144 - Security):      A network share object was deleted (S)
-        (5168 - Security):      SPN check for SMB/SMB2 failed (F)
+        5140 - Security:      A network share object was accessed (S,F)
+        5142 - Security:      A network share object was added (S)
+        5143 - Security:      A network share object was modified (S)
+        5144 - Security:      A network share object was deleted (S)
+        5168 - Security:      SPN check for SMB/SMB2 failed (F)
     -->
     <Select Path="Security">*[System[(EventID=5140 or EventID=5142 or EventID=5143 or EventID=5144 or EventID=5168)]]</Select>
 </Query>
-
-

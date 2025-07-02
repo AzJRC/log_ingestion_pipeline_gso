@@ -1,28 +1,47 @@
 <!--
-    QueryName:      Account Management
-    QueryIntent:    Identity and Access > User Account management
-    Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
-    Attack:         T1098
-    Tag:            Access Control
-    Tag:            Security Monitoring
-    Tag:            Audit Policy
+    MetaSchemaVersion:  1.0
+    QueryName:          Account Management
+    Intent:
+        - Primary:      Identity and Access
+        - Secondary:    User Account Management
+    Platform:           WIN8, WIN10, WIN2012, WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server, Workstation
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    QueryVersion:       1.0
+    QueryDate:          2025-07-01
+    Verbosity:          Low
+    Tag:                Technique/T1098
+    Tag:                Category/Account Management
+    Tag:                Subcategory/User Account Management
+    Tag:                Source/Windows Events
+    RequiresAudit:      Yes
+    RequiredSettings:
+        - AuditPolicy:  Account Management/User Account Management
+    Description:        Monitors user account lifecycle events which are critical for access control monitoring.
 -->
-<Query id="0">
+<Query Id="0">
     <!--
-        (4720) A user account was created (S)
-        (4722) A user account was enabled (S)
-        (4723) Attempt to change an account’s password (S)
-        (4724) Attempt to reset an account’s password (S)
-        (4725) A user account was disabled (S)
-        (4726) A user account was deleted (S)
-        (4738) A user account was changed (S)
-        (4740) A user account was locked out (S)
-        (4767) A user account was unlocked (S)
-        (4781) The name of an account was changed (S)
-        (4782) The password hash of an account was accessed (S)
-        (4793) Password policy API called (S)
+        MetaSchemaVersion:  EVT-1.0
+        4720 - A user account was created (S)
+        4722 - A user account was enabled (S)
+        4723 - Attempt to change an account’s password (S)
+        4724 - Attempt to reset an account’s password (S)
+        4725 - A user account was disabled (S)
+        4726 - A user account was deleted (S)
+        4738 - A user account was changed (S)
+        4740 - A user account was locked out (S)
+        4767 - A user account was unlocked (S)
+        4781 - The name of an account was changed (S)
+        4782 - The password hash of an account was accessed (S)
+        4793 - Password policy API called (S)
     -->
-    <Select Path="Security">*[System[(EventID=4720 or EventID=4722 or EventID=4723 or EventID=4724
-        or EventID=4725 or EventID=4726 or EventID=4738 or EventID=4740 or EventID=4767 or
-        EventID=4781 or EventID=4782 or EventID=4793)]]</Select>
+    <Select Path="Security">
+        *[System[(EventID=4720 or EventID=4722 or EventID=4723 or EventID=4724
+            or EventID=4725 or EventID=4726 or EventID=4738 or EventID=4740 or EventID=4767
+            or EventID=4781 or EventID=4782 or EventID=4793)]]
+    </Select>
 </Query>
