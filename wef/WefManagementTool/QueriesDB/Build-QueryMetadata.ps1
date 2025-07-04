@@ -106,6 +106,16 @@ function Build-MetadataQuery {
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 
     foreach ($XmlQueryFile in $XmlQueryFiles) {
+        $Metadata = [PSCustomObject]@{
+            QueryName   = $null
+            QueryIntent = $null
+            EventList   = @()
+            Providers   = @()
+            Channels    = @()
+            Authors     = @()
+            Attack      = @()
+            Tags        = @()
+        }
 
         # Strongly typed variables
         [string]$QueryName = $null
@@ -158,7 +168,7 @@ function Build-MetadataQuery {
             }
         }
 
-        # Build the final strongly-typed QueryMetadata object
+        # Write QueryMetadata Object
         $QueryMetadata = [QueryMetadata]::new(
             $QueryName, 
             $QueryIntent, 
@@ -170,7 +180,7 @@ function Build-MetadataQuery {
             $Tags
         )
 
-        # Write to JSON file
+        # Write JSON file
         $OutputJsonPath = $XmlQueryFile.FullName -replace ("query.xml", "meta.json")
         Write-QueryMetadataFile -QueryMetadata $QueryMetadata -OutputFile $OutputJsonPath
     }
@@ -295,6 +305,20 @@ function Parse-RawQueryAuthor {
         Write-Error "Failed to create QueryAuthor object. Check input format. Input: '$RawQueryName'"
         return $null
     }
+}
+
+function Write-QueryMetadataFile {
+    param (
+        [Parameter(Mandatory = $true)]
+        [QueryMetadata]
+        $QueryMetadata,
+
+        [Parameter(Mandatory = $true)]
+        [string]
+        $OutputFile
+    )
+
+    ConvertTo-Json -InputObject $QueryMetadata -Compress | Out-File $OutputFile
 }
 
 function Write-QueryMetadataFile {
