@@ -1,0 +1,53 @@
+<!--
+    MetaSchemaVersion:  1.0
+    QueryName:          Kerberos Auditing
+    Intent:
+        - Primary:      Identity and Access
+        - Secondary:    Account Logon, Kerberos Operation
+    Platform:           WIN8, WIN10, WIN2012, WIN2016, WIN2019, WIN2022
+    SecurityProfile:    Domain Controller
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    Reference:
+        - Name:         Michel de CREVOISIER
+        - Alias:        mdecrevoisier
+        - Resource:     Github/Windows-auditing-baseline
+        - Resource:     URL/https://github.com/mdecrevoisier/Windows-auditing-baseline
+    QueryVersion:       1.0
+    QueryDate:          2025-06-30
+    Tag:                Technique/T1558, T1110, T1078.002
+    Tag:                Category/Account Logon
+    Tag:                Subcategory/Kerberos Authentication Service
+    Tag:                Subcategory/Kerberos Service Ticket Operations
+    Tag:                Action/Authentication
+    Tag:                Action/Kerberoasting
+    Tag:                Misc/Kerberos, TGT, ADDS, KDC
+    RequiresAudit:      Yes
+    RequiredSettings:
+        - AuditPolicy:  Account Logon/Kerberos Authentication Service
+        - AuditPolicy:  Account Logon/Kerberos Service Ticket Operations
+    Description:        
+-->
+<Query Id="0">
+    <!--
+        MetaSchemaVersion:  EVT-1.0
+        4768 - Security:    A Kerberos authentication ticket (TGT) was requested (S,F)
+        4771 - Security:    Kerberos preauthentication failed (F)
+        4772 - Security:    A Kerberos authentication ticket request failed (F)
+        4820 - Security:    A Kerberos Ticket granting ticket (TGT) was denied because the device does not meet the access control restrictions (F)
+        4824 - Security:    Kerberos preauthentication by using DES or RC4 failed because the account was a member of the Protected User group (F)
+        4769 - Security:    A Kerberos service ticket was required (S,F)
+        4770 - Security:    A Kerberos service ticket was renewed (S)
+        4773 - Security:    A Kerberos service ticket request failed (F)
+        4821 - Security:    A Kerberos service ticket was denied because the user, device, or both does not meet the access control restrictions (F)
+
+    -->
+    <Select Path="Security">
+        *[System[(EventID=4768 or EventID=4771 or EventID=4772 or 
+            EventID=4820 or EventID=4824 or EventID=4769 or 
+            EventID=4770 or EventID=4773 or EventID=4821)]]
+    </Select>
+</Query>
