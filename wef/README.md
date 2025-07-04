@@ -36,15 +36,17 @@ Windows Event Forwarding is often configured in Windows Domains, as this makes t
 
 2. **Enable WinRM in your WECs and WEC clients**
 
-
+![](/media/wef_enablewinrm.png)
 
 3. **Configure the WEC URI in your clients**
 
-
+![](/media/wef_configurewectarget.png)
 
 4. **Allow the Network Service to read the Security Event Log**
 
+![](/media/wef_securitylogaccesssddl.png)
 
+`O:BAG:SYD:(A;;0xf0005;;;SY)(A;;0x5;;;BA)(A;;0x1;;;S-1-5-32-573)(A;;0x1;;;NS)`
 
 5. **Create a source-initiated subscription**
 
