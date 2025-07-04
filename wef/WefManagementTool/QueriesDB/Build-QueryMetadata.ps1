@@ -106,17 +106,7 @@ function Build-MetadataQuery {
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 
     foreach ($XmlQueryFile in $XmlQueryFiles) {
-        $Metadata = [PSCustomObject]@{
-            QueryName   = $null
-            QueryIntent = $null
-            EventList   = @()
-            Providers   = @()
-            Channels    = @()
-            Authors     = @()
-            Attack      = @()
-            Tags        = @()
-        }
-
+    
         # Strongly typed variables
         [string]$QueryName = $null
         [QueryIntent]$QueryIntent = $null
@@ -320,6 +310,7 @@ function Write-QueryMetadataFile {
 
     ConvertTo-Json -InputObject $QueryMetadata -Compress | Out-File $OutputFile
 }
+
 
 function Write-QueryMetadataFile {
     param (
