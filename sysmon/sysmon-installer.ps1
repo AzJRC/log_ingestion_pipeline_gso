@@ -38,18 +38,18 @@
     Alternatively, you can set up a startup script with a GPO policy under Policies > Windows Settings > Scripts.
 #>
 
-# CONFIGURE PARAMETERS
+# CONFIGURATION PARAMETERS
 
-$DriverName = '<DRV_NAME>'         # Default Driver Name is `SysmonDrv.sys`
-$ExecutableName = '<EXEC_name>'    # Default Executable Name is `Sysmon.exe`
-$CurrentVersion = '<SYSMON_VER>'   # You can get the Sysmon Version by running the command `Sysmon.exe -c`
-$WindowsDomain = '<WIN_DOMAIN>'    # E.g. hostname.subdomain.domain.tld
-$SharedFolder = 'WindowsArchive'   # Change if necessary
+$Hostname = '<Hostname>'           # E.g. DC01
+$DriverName = 'SysmonDrv.sys'         # Default Driver Name is `SysmonDrv.sys`
+$ExecutableName = 'Sysmon.exe'    # Default Executable Name is `Sysmon.exe`
+$CurrentVersion = '15.15'   # Run the command `Sysmon.exe -c`. Type just the number 'XX.YY' E.g. '15.15'
+$SharedFolder = 'SysmonArchive'    # Change if necessary
 
 # DO NOT MODIFY BELOW THIS LINE (Unless necessary)
 
 # Get Sysmon Path
-$SysmonPath = "\\$($WindowsDomain)\$($SharedFolder)\SysmonV$($CurrentVersion)\$($ExecutableName)"
+$SysmonPath = "\\$($Hostname)\$($SharedFolder)\SysmonV$($CurrentVersion)\$($ExecutableName)"
 
 # Check if the driver if present
 $Present = Test-Path -Path "C:\Windows\$($DriverName)" -PathType Leaf
@@ -60,13 +60,15 @@ if ($Present) {
     $HostVersion = (Get-Item "C:\Windows\$($DriverName)").VersionInfo.FileVersion
     if ($CurrentVersion -eq $HostVersion) {
         Write-Host -Object "[+] Sysmon is current approved version." -ForegroundColor Green
-    } else {
+    }
+    else {
         # Execute upgrade process.
         Write-Host -Object "[-] Sysmon needs upgrade." -ForegroundColor Red
         Start-Process -FilePath $SysmonPath -ArgumentList '-u' -WindowStyle Hidden
-        Start-Process -FilePath $SysmonPath -ArgumentList '-accepteula','-i' -WindowStyle Hidden
+        Start-Process -FilePath $SysmonPath -ArgumentList '-accepteula', '-i' -WindowStyle Hidden
     }
-} else {
+}
+else {
     Write-Host -Object "[+] Installing Windows SysmonV$($CurrentVersion)" -ForegroundColor Green
-    Start-Process -FilePath $SysmonPath -ArgumentList '-accepteula','-i' -WindowStyle Hidden
+    Start-Process -FilePath $SysmonPath -ArgumentList '-accepteula', '-i' -WindowStyle Hidden
 }

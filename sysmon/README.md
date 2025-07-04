@@ -68,7 +68,7 @@ Available hashing algorithms include `SHA1`, `SHA2`, `MD5`, and `IMPHASH`. If yo
 - Change the service description of Sysmon from "System Monitor Service" to something else. You can leverage WMI or manually modify the Registry Key value `Description` located at `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Sysmon\`. This will make your Sysmon installation a little bit more stealthy in a very secure manner.
 - If you are working in a big organization, renaming the Sysmon Service and Sysmon driver may provide value, but keep in mind the risks of forgetting the new names.
 - It is not recommended to change the altitude number of Sysmon, even if its for making the service stealthier. The risks are high.
-- Adminsitrative users can (unload the Sysmon driver)[https://www.ired.team/offensive-security/defense-evasion/unloading-sysmon-driver] with the `fltMC.exe` LoLBin. You can prevent this behavior by setting up a Domain Group Policy. Also, you can detect this behavior when `fltMC.exe` is executed by inspecting the Sysmon Event Log `ID 1: Process Creation` with the following detail information:
+- Adminsitrative users can [unload the Sysmon driver](https://www.ired.team/offensive-security/defense-evasion/unloading-sysmon-driver) with the `fltMC.exe` LoLBin. You can prevent this behavior by setting up a Domain Group Policy. Also, you can detect this behavior when `fltMC.exe` is executed by inspecting the Sysmon Event Log `ID 1: Process Creation` with the following detail information:
 
 ```PowerShell
 CommandLine: "C:\Windows\system32\fltMC.exe" unload SysmonDrv
