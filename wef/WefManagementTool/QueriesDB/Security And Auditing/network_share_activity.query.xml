@@ -1,5 +1,5 @@
 <!--
-    QueryName:      Network Share Object Activity
+    QueryName:      Network Share Activity
     QueryIntent:    Security & Auditing > File Share access and configuration changes
     Author:         Alejandro Rodriguez, AzJRC, WefManagementTool
     Attack:         T1071.002

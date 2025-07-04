@@ -12,7 +12,7 @@ Import-Module (Join-Path -Path $PSScriptRoot -ChildPath 'Utilities\Get-WMTQueryM
 # enum MetaSchemaFields
 # class QueryMetadataSchema {}
 
-function Build-MetadataQuery {
+function Build-QueryMetadata {
     param(
         [string]$RootDatabase = (Join-Path -Path $PSScriptRoot -ChildPath '..\QueriesDB' | Resolve-Path)
     )
@@ -39,26 +39,69 @@ function Build-MetadataQuery {
 
         # 2. Parse comment block metadata
         $Meta = Parse-QueryMetadata -Lines $RawQueryXmlLines
+        $Meta.ToString()
 
-        # 3. Compose final metadata object
-        $JsonObject = [ordered]@{
-            MetaSchemaVersion = $Meta.MetaSchemaVersion
-            QueryName         = $Meta.QueryName
-            QueryIntent       = @{ Primary = $Meta.Primary; Secondary = $Meta.Secondary }
-            Platform          = $Meta.Platform
-            SecurityProfile   = $Meta.SecurityProfile
-            Authors           = $Meta.Authors
-            References        = $Meta.References
-            Tags              = $Meta.Tags
-            RequiresAudit     = $Meta.RequiresAudit
-            RequiredSettings  = $Meta.RequiredSettings
-            Description       = $Meta.Description
-            QueryElements     = $QueryElements
-        }
-
-        # 4. Write META.JSON
+        # 3. Write META.JSON
         continue    # [Stop] Temporary 
         $OutputJsonPath = $queryXmlFile.FullName -replace "query.xml", "meta.json"
         $JsonObject | ConvertTo-Json -Depth 5 | Out-File $OutputJsonPath -Encoding UTF8
     }
+}
+
+function Parse-QueryXmlElements {
+    [OutputType([list[QueryElement]])]
+    param(
+        [xml]$Xml
+    )
+
+
+    $xmlQueryElementList = $Xml.GetElementsByTagName([QuerySchemaTagNames]::Query.ToString())
+    ForEach ($xmlQueryElement in $xmlQueryElementList) {
+        
+        $xmlQueryTypeElementList = (
+            $xmlQueryElement.GetElementsByTagName([QuerySchemaTagNames]::Select.ToString()) + 
+            $xmlQueryElement.GetElementsByTagName([QuerySchemaTagNames]::Suppress.ToString())
+        )
+
+        $rawPathAttribute = $xmlQueryElement.Attributes["Path"].Value
+
+        ForEach ($xmlQueryType in $xmlQueryTypeElementList) {
+            $rawQueryType = $xmlQueryType.Name
+            $rawXpathQuery = $xmlQueryType.InnerXml
+        }
+
+    }
+
+    return $queryElementList
+}
+
+function Parse-QueryMetadata {
+    [OutputType([QueryMetadataSchema])]
+    param(
+        [list[string]]$Lines
+    )
+
+    $QueryMetadata = [QueryMetadataSchema]::new()
+
+    $Lines | ForEach-Object {
+        $currLine = $_
+
+    }
+
+    return $QueryMetadata
+}
+
+function Extract-ProvidersFromChannels {
+    [OutputType([void])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [list[string]]
+        $Channels
+    )
+    $Providers = [list[string]]::new()
+    Foreach ($Channel in $Channels) {
+        $Provider = ($Channel -split '/')[0]    # Assumes a structure {provider_name}/{channel_stream_name}
+        if ($Provider -ne $Channel) { $Providers.Add($Provider) } 
+    }
+    return $Providers 
 }

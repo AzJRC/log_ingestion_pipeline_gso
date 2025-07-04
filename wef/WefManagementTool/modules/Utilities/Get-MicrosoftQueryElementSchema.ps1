@@ -3,6 +3,12 @@ using namespace system.collections.generic
 # Reference:
 # https://learn.microsoft.com/en-us/windows/win32/wes/queryschema-elements
 
+enum QuerySchemaTagNames {
+    Query
+    Select
+    Suppress
+}
+
 class QueryTypeElement {
     static [string] $QUERY_TYPE_SUPPRESS = 'Suppress'
     static [string] $QUERY_TYPE_SELECT = 'Select'
@@ -51,7 +57,7 @@ class QueryElement {
     $SelectQueryElements = [list[QueryTypeElement]]::new()
     $SuppressQueryElements = [list[QueryTypeElement]]::new()
 
-    QueryElement($QueryId) {
+    QueryElement([int]$QueryId) {
         $this.QueryId = $QueryId
     }
 
