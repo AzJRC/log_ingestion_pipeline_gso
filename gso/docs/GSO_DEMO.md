@@ -18,8 +18,8 @@ For this demo I will be using Proxmox VE 8.3.3 to run some virtual machines:
 
 - Windows Server 2019 (Domain Controller, DC)
 - Windows 10 Pro (Workstation, WS)
-- Windows 10 Pro (Windows Event Collector, WEC)
-- Optionally, an OPNSense Firewall (Gateway, GW)
+- Windows 10 Pro (Optional Windows Event Collector, WEC; WS otherwise)
+- Optionally, an OPNSense Firewall (Optional Gateway, GW)
 
 Additionally, you can create another VM for Kali Linux or just use your host/physical computer for that matter.
 
@@ -165,16 +165,57 @@ Restart the computer and then login with the domain administrator account `[Doma
 
 Repeat the same steps listed in the section [Windows 10 Pro - Workstation](#windows-10-pro---workstation). Just make sure that in this computer you add two different local administrators.
 
-### Set-up Blue Team Side Visibility settings
+If you decide to set up this machine as a WEC, follow the instructions of the section [Collect the Logs in the WEC (Optional)](#collect-the-logs-in-the-wec-optional)
+
+## Ingestion Pipeline and Blue Team Side Visibility Settings
 
 Now that the environment context is up and running, let's enable the observability mechanisms that will help us detect suspicious and malicious incidents.
 
-#### Deploy Windows Sysmon
+### Install BindPlane Agents
+
+To forward the collected events to Google SecOps, you will need an agent. Google recommends using the partner solution BindPlane, but if you do not have access to this solution, you can always use another alternative:
+
+1. Winlogbeat (Elastic)
+2. NXLog
+3. Rsyslog for Windows
+
+The benefit of using BindPlane solution, besides being optimized for Google SecOps, is that you can make the ingestion pipeline point-to-point. With the other alternatives, you'll need to use the proxy solution [Google SecOps Forwarder](#) 
+
+```
+[TODO] Dev Note: Add documentation of Google SecOps Forwarder.
+```
+
+This demo asumes that we are going to use the [Cloud BindPlane Agent](https://bindplane.com/).
+
+#### Access the web portal
+
+1. Go to `https://bindplane.com/` and sign in with your account.
+2. Add a source configuration that consumes standard windows event logs.
+3. Add a destination configuration that sends logs to Google SecOps.
+    - Use `gRPC` protocol
+    - Use `JSON` authentication method and paste the content of the `auth.json` file provided by Google SecOps.
+    - Optionally, add your domain in the namespace value.
+    - Optionally, add the label `env` with value `test`.
+4. In the agents tab, click on `Install agents`
+5. Copy the installation script in a privileged terminal for each computer you want to install BindPlane.
+    - If using WECs, you will only install BindPlane in these computers.
+    - In such case, you'll need to tweek the source configuration of your agents to read the custom event logs.
+6. Make sure the computers' hostname appears in the web UI.
+
+![](/media/gso_demo_installbindplaneagent.png)
+![](/media/gso_demo_bindplaneagentsadded.png)
+
+You can read more about BindPlane agent [here](#TODO )
+
+```
+[TODO] Dev Note: Add documentation of BindPlane.
+```
+
+### Deploy Windows Sysmon
 
 To deploy Windows Sysmon in a Windows domain effectively, read this [file](/sysmon/README.md) and the [Documentation on Windows Sysmon Deployment](/sysmon/docs/WINDOWS_SYSMON_DEPLOYMENT.md) (You can deliberately use the vulnerable shared folder we created earlier to install Sysmon).
 
-
-#### Enable Detailed Windows logging
+### Enable Detailed Windows logging
 
 Windows by default is very quiet. You need to enable more granular audit policies.
 
@@ -215,7 +256,11 @@ Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Mod
 
 Finally, keep in mind that with Sysmon, some of these events are better covered. For example, process creation with Sysmon is far more detailed that event *4688* even with the command line field populated, and the structure of the query is easier to query, read, and parse.
 
-#### Collect the Logs in the WEC
+```diff
++ Important: You do not need to enable all logging at once. In the following sections, I'll give you the details of which event logs are important to monitor for each adversary technique, and which advanced logging features should be enabled in such case.
+```
+
+### Collect the Logs in the WEC (Optional)
 
 To set up the WEC, read this [file](/wef/README.md). You could find the **Wef Managment Tool** very useful for this task.
 
