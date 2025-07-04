@@ -69,7 +69,6 @@ function Parse-QueryXmlElements {
             $rawQueryType = $xmlQueryType.Name
             $rawXpathQuery = $xmlQueryType.InnerXml
         }
-
     }
 
     return $queryElementList
