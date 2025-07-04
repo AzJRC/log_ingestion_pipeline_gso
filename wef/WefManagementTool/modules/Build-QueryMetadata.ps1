@@ -21,8 +21,6 @@ MetadataSchema
     "tags": ["tag_1", "tag_2", "tag_3", ...]                            # Related terms to the query's intent
 }#>
 
-# [NOTE] Program with PowerShell 7.5.1 works
-
 class QueryAuthor {
     [ValidateNotNullOrEmpty()][string]$AuthorName
     [ValidateNotNullOrEmpty()][string]$AuthorAlias
@@ -100,13 +98,17 @@ function Build-MetadataQuery {
         [Parameter(Mandatory = $false)]
         [string]
         [Alias("Root")]
-        $RootDatabase = "$PSScriptRoot\..\QueriesDB"
+        $RootDatabase = $null
     )
+
+    if (-not $RootDatabase) { 
+        $RootDatabase = Join-Path -Path ((Join-Path -Path $PSScriptRoot -ChildPath '..') | Resolve-Path) -ChildPath 'QueriesDB'
+    }
 
     $XmlQueryFiles = Get-ChildItem -Path $RootDatabase -Recurse -Filter "*.query.xml" -File
 
     foreach ($XmlQueryFile in $XmlQueryFiles) {
-    
+
         # Strongly typed variables
         [string]$QueryName = $null
         [QueryIntent]$QueryIntent = $null
@@ -158,7 +160,7 @@ function Build-MetadataQuery {
             }
         }
 
-        # Write QueryMetadata Object
+        # Build the final strongly-typed QueryMetadata object
         $QueryMetadata = [QueryMetadata]::new(
             $QueryName, 
             $QueryIntent, 
@@ -170,7 +172,7 @@ function Build-MetadataQuery {
             $Tags
         )
 
-        # Write JSON file
+        # Write to JSON file
         $OutputJsonPath = $XmlQueryFile.FullName -replace ("query.xml", "meta.json")
         Write-QueryMetadataFile -QueryMetadata $QueryMetadata -OutputFile $OutputJsonPath
     }
@@ -296,21 +298,6 @@ function Parse-RawQueryAuthor {
         return $null
     }
 }
-
-function Write-QueryMetadataFile {
-    param (
-        [Parameter(Mandatory = $true)]
-        [QueryMetadata]
-        $QueryMetadata,
-
-        [Parameter(Mandatory = $true)]
-        [string]
-        $OutputFile
-    )
-
-    ConvertTo-Json -InputObject $QueryMetadata -Compress | Out-File $OutputFile
-}
-
 
 function Write-QueryMetadataFile {
     param (

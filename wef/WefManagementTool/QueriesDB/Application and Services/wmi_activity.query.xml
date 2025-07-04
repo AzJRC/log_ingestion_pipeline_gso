@@ -1,0 +1,36 @@
+<!--
+    MetaSchemaVersion:  1.0
+    QueryName:          WMI Activity
+    Intent:
+        - Primary:      Application and Services
+        - Secondary:    Script Execution, WMI
+    Platform:           WIN8, WIN10, WIN2012, WIN2016, WIN2019, WIN2022, WIN2025
+    SecurityProfile:    Domain Controller, Member Server
+    Author:
+        - Name:         Alejandro Rodriguez
+        - Alias:        Username/AzJRC
+        - Resource:     Github/WefManagementTool
+        - Resource:     URL/https://github.com/AzJRC/Log-Ingestion
+    QueryVersion:       1.0
+    QueryDate:          2025-07-01
+    Verbosity:          Low
+    Tag:                Technique/T1047
+    Tag:                Action/Script Execution, Remote Management
+    Tag:                Source/Windows Events
+    RequiresAudit:      No
+    Description:        Monitors WMI method invocations and consumer operations, commonly used for script execution and lateral movement.
+-->
+
+<Query Id="0">
+    <!--
+        MetaSchemaVersion:  EVT-1.0
+        5857 - WMI Method Activity (-)
+        5858 - WMI Method Parameters Activity (-)
+        5859 - WMI Consumer Activity (-)
+        5860 - WMI Consumer Failure (-)
+        5861 - WMI Provider Event (-)
+    -->
+    <Select Path="Microsoft-Windows-WMI-Activity/Operational">
+        *[System[(EventID=5857 or EventID=5858 or EventID=5859 or EventID=5860 or EventID=5861)]]
+    </Select>
+</Query>

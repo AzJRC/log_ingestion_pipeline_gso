@@ -1,4 +1,4 @@
-# Windows Sysmon deployment
+# Windows Sysmon Deployment
 
 Installing Windows Sysmon in distributed environments (Windows domains) can be somewhat tricky, specially when we care about security risks. In this documentation file you'll find information on how to deploy Widows Sysmon in a secure manner.
 
