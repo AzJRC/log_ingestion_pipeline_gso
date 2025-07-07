@@ -36,7 +36,7 @@ Configure [NTP servers](https://developers.google.com/time/guides#linux) in Prox
 
 Create the virtual machines with [Windows Server 2019](https://pve.proxmox.com/wiki/Windows_2019_guest_best_practices) and two with [Windows 10](https://pve.proxmox.com/wiki/Windows_10_guest_best_practices). Finally, create a last VM for the [OPNSense Firewall](https://www.zenarmor.com/docs/network-security-tutorials/opnsense-installation).
 
-![Pene](/media/gso_demo_ntpconfig.png)
+![Demo topology diagram](/media/gso_demo_ntpconfig.png)
 
 ### OPNSense Firewall
 
@@ -269,274 +269,222 @@ To set up the WEC, read this [file](/wef/README.md). You could find the **Wef Ma
 
 All the attacks outlined in this section are taken from The Cyber Mentor's YouTube video [Hacking Active Directory for Beginners](https://youtu.be/VXxH4n684HE?si=gjWkzIV0L4qcJqys)
 
+**Note**: Keep in mind that this document is mostly about detection techniques rather than mitigation techniques. You won't find information about how to mitigate and prevent the adversary techniques described below.
+
 ### LLMNR Poisoning
 
 LLMNR (Link Local Multicast Name Resolution) is a Windows feature that allows computers to resolve names of other computers in a network, as a fallback when DNS services fail or are not enabled.
 
-Note: Keep in mind that this document is mostly about detection techniques rather than mitigation techniques. You won't find many information about how to mitigate and prevent the adversary techniques described below; however, detection techniques are present.
+#### Detecting LLMNR Poisoning
 
-#### Blue Team: Detect LLMNR Poisoning
+This detection scenario focuses on identifying LLMNR poisoning and related credential relay attacks. These attacks exploit weaknesses at the network protocol layer (LLMNR/NBNS) and typically leave little direct evidence on the compromised Windows host itself. As a result, defenders must rely on correlating indirect artifacts across multiple log sources to detect such activities.
 
-For this techniue, this is a network-layer deception attack, so there is little to no direct evidence on the Windows host of the poisoning itself.
+---
 
-Our best bet to detect this kind of malicious activity is to focus on:
+The primary approach to identifying LLMNR poisoning or SMB relay attacks is to monitor for patterns that combine suspicious network activity with authentication events, revealing potential attempts of initial access.
 
-1. Network connection logs
-    - DNS query (Sysmon 22) to unknown or suspicious DNS queries. Better handled if you have a list of trusted domains or hosts.
-2. Windows network firewall logs or external network firewall logs
-    - SMB (TCP-445) traffic or LLMNR/NBNS (UDP-5355/UDP-137) communications from unknown or never seen endpoints.
+1. Network Indicators
+    - Captured by Sysmon Event ID `22` on Windows endpoints, filtering through a maintained list of known trusted domains to help isolate unusual queries.
+    - Adversaries might try to perform initial access after a successful LLMNR Poisoning attack, and therefore, Sysmon Event ID `3` logs the resulting connection attempt to an SMB or RDP service on the attacker's machine.
 
-Additionally, you can monitor the following events, which tell the story of the adversary trying to gain initial access to a remote computer.
+2. Network Firewall Logs or Windows Filtering Platform (WFP) events
+    - SMB typically uses `TCP/445`.
+    - LLMNR uses `UDP/5355` and NBNS uses `UDP/137`.
+    - Look for connections initiated from previously unseen hosts or unexpected external sources.
 
-1. Suspicious authentication events
-    - Failed logons (WinEvt 4625) type 3 (Network logon) with unusual or unexpected source IP addresses after suspicious network connections.
-    - Successful logons (WinEvt 4624) type 3 (Network logon) with unusual or unexpected source IP address. Especially suspicious after one or many failed logon events or suspicious connections.
-    - Logon with explicit credentials (WinEvt 4648) After 4624, from same uncommon src IP addresses. May indicate the use of remote access tools such as xfreerdp or remmina.
-    - Network connection (SysmonEvt 3) with unusual or unexpected source IP address.
+3. Authentication events (Initial Access)
+    - **Failed network logons** (`Windows Event ID 4625`, Logon Type 3 or 7), originating from unexpected IP addresses shortly after suspicious network activity.
+    - **Successful network logons** (`Windows Event ID 4624`, Logon Type 3 or 7) from unusual sources, particularly following failed attempts or DNS anomalies.
+    - **Logons with explicit credentials** (`Event ID 4648`), which may suggest credential relay or the use of remote access tools such as `xfreerdp` or `remmina`.
 
-A event 22 from Sysmon is generated when the victim is lured to search for an unexistent shared resource or mistakenly types a word that is not associated to any network shared resource.
+Sysmon Event ID `22` records DNS queries performed by Windows processes. This becomes significant in LLMNR poisoning scenarios where a user mistypes a network share (e.g., `\\FileServet\Folder`; notice the type 'Servert' instead of 'Server'), triggering a name resolution attempt that may be hijacked by a malicious responder. 
 
-At the time of writing this example, Responder 3.1.6.0 was only able to spoof and poison the LLMNR request only if the client types a trivial word (E.g. "Files") or if the victims types the adversary IP address with path (E.g. "\\192.168.68.123\Files"). In the last case, unfortunately the IP address of the attacker's machine is not included, an instead the QueryName field shows the value wpad (`<Data Name="QueryName">wpad</Data>`). If the victim types a random word (`<Data Name="QueryName">test</Data>`), the field `QueryResults` will include the IP address of any device that answered the query (`<Data Name="QueryResults">fe80::eb26:b9d4:acb3:81b8;::ffff:192.168.68.123;</Data>`) and `msedge.exe` will be executed (generating another event Sysmon 1: Process Creation).
+The `QueryName` field captures the originally requested name, and the `QueryResults` field lists the IP addresses that responded, which may include the attacker’s IP (if not spoofed). For example:
 
-Event examples:
-- Profile: Workstation - Victim computer
+```xml
+<Data Name="QueryResults">
+  fe80::eb26:b9d4:acb3:81b8;::ffff:192.168.68.123;
+</Data>
+```
+
+Notice that if a user directly types a path with an IP (e.g., `\\192.168.68.123\Files`), some implementations may register misleading `QueryName` values such as `wpad`, while still recording connections to the attacker.
+
+In summary, on the victim's worksation:
+- **Sysmon Event ID 22 (DNS Query)**: Indicates a name resolution attempt, potentially triggered by mistyping or by malicious influence.
+- **Sysmon Event ID 3 (Network Connection)**: Logs the resulting connection attempt to an SMB or RDP service on the attacker's machine.
+- **Windows Event ID 4624 (Successful Logon)**: Reveals a successful connection to the victim's computer after the adversary has deciphered (using `hashcat` for example) the password.
+
+If all the previous events occur, this represents a [Credential Access (TA0006)](https://attack.mitre.org/tactics/TA0006/) scenario. If the unauthorized access event never occurs, this represents a [Collection (TA0009)](https://attack.mitre.org/techniques/T1557/001/) scenario. Some might also consider this an [Initial Access (TA0001)](https://attack.mitre.org/tactics/TA0001/) attempt. More details about this technique can be found in Mitre Att&ck for [Adversary-in-the-Middle (T1557.001)](https://attack.mitre.org/techniques/T1557/001/).
+
+The following YARA-L rule demonstrates how to correlate these multi-stage events to detect potential LLMNR poisoning or SMB relay activity:
+
+```YARA
+rule ajrc_llmnrPoisoningInitialAccess {
+  meta:
+    author = "Alejandro Javier Rodríguez Cantón"
+    description = "Detect internal LLMNR poisoning and credential use via DNS query, RDP connection, and login events"
+    severity = "High"
+    priority = "Medium"
+    rule_version = "1.0"
+    response = "Investigate shared resource attempts and validate remote connections."
+    mitre_tactic = "TA0001, TA0006, TA0009"
+    mitre_technique = "T1557.001"
+
+  events:
+    // DNS query to untrusted host
+    $e_dns.metadata.event_type = "NETWORK_DNS"
+    $e_dns.metadata.vendor_name = "Microsoft"
+    not $e_dns.network.dns.questions.name in regex %AjrcLocal_trustedHostsAndDomains
+    re.regex($e_dns.network.dns.answers.data, `192\.168\.\d{1,3}\.\d{1,3}|172\.16\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}`)
+    $e_dns.principal.asset.hostname = $hostname
+
+    // RDP connection (Sysmon 3)
+    $e_conn.metadata.event_type = "NETWORK_CONNECTION"
+    $e_conn.metadata.vendor_name = "Microsoft"
+    $e_conn.target.port = 3389
+    $e_conn.principal.asset.hostname = $hostname
+    $e_conn.principal.ip = $victim_ip
+
+    // Login event (explicit credentials, Logon Type 7 or 10)
+    $e_logon.metadata.event_type = "USER_LOGIN"
+    $e_logon.metadata.vendor_name = "Microsoft"
+    not $e_logon.target.user.userid = /SYSTEM/ nocase
+    $e_logon.extensions.auth.auth_details = /Logon Type: (7|10)/
+    $e_logon.principal.asset.hostname = $hostname
+    $e_logon.principal.ip = $victim_ip
+    $e_logon.metadata.product_event_type = $logon_evtid
+
+    // Enforce event sequencing: DNS -> connection -> login
+    $e_dns.metadata.event_timestamp.seconds <= $e_conn.metadata.event_timestamp.seconds
+    $e_conn.metadata.event_timestamp.seconds <= $e_logon.metadata.event_timestamp.seconds
+
+  match:
+    $hostname over 30m
+
+  outcome:
+    $risk_score = max(90 - if($logon_evtid = "4625", 40, 0))
+
+  condition:
+    $e_dns and $e_conn and $e_logon
+}
+```
+
+**Important notes on tunning**
+
+- This detection relies on trusted domain lists (`%Domain_trustedHostsAndDomains`).
+- The rule currently does not incorporate firewall logs; however, including external or host firewall events can further strengthen detection and minimize false positives.
+- Adjust the correlation window (30m) and monitored port values to align with your organization’s typical network and authentication behavior.
+
+The following are sample events in their raw format used for the detection rule.
 ```XML
-<!-- Sysmon 22 - DNS -->
+<!-- Sysmon 22: DNS -->
 
 <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
-    <System>
-        <Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}" /> 
-        <EventID>22</EventID> 
-        <Version>5</Version> 
-        <Level>4</Level> 
-        <Task>22</Task> 
-        <Opcode>0</Opcode> 
-        <Keywords>0x8000000000000000</Keywords> 
-        <TimeCreated SystemTime="2025-07-05T17:31:32.9105570Z" /> 
-        <EventRecordID>4801</EventRecordID> 
-        <Correlation /> 
-        <Execution ProcessID="3068" ThreadID="4100" /> 
-        <Channel>Microsoft-Windows-Sysmon/Operational</Channel> 
-        <Computer>WS01.ajrc.local</Computer> 
-        <Security UserID="S-1-5-18" /> 
-    </System>
+    <System> ... </System>
     <EventData>
         <Data Name="RuleName">-</Data> 
         <Data Name="UtcTime">2025-07-05 17:31:31.516</Data> 
         <Data Name="ProcessGuid">{3b1ba004-6170-6869-f909-000000000700}</Data> 
         <Data Name="ProcessId">10812</Data> 
-        <Data Name="QueryName">test</Data> 
-        <Data Name="QueryStatus">0</Data> 
+        <Data Name="QueryName">test</Data>     
+        <Data Name="QueryStatus">0</Data>
         <Data Name="QueryResults">fe80::eb26:b9d4:acb3:81b8;::ffff:192.168.68.123;</Data> 
         <Data Name="Image">C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe</Data> 
         <Data Name="User">AJRC\sebastian.gomez</Data> 
     </EventData>
 </Event>
 
-<!-- 4648 - Login with explicit credentials -->
+<!-- Sysmon 3: Network Connection -->
 <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
-- <System>
-  <Provider Name="Microsoft-Windows-Security-Auditing" Guid="{54849625-5478-4994-a5ba-3e3b0328c30d}" /> 
-  <EventID>4648</EventID> 
-  <Version>0</Version> 
-  <Level>0</Level> 
-  <Task>12544</Task> 
-  <Opcode>0</Opcode> 
-  <Keywords>0x8020000000000000</Keywords> 
-  <TimeCreated SystemTime="2025-07-05T18:56:28.6019389Z" /> 
-  <EventRecordID>19576</EventRecordID> 
-  <Correlation ActivityID="{c41c4182-ec88-0000-8a42-1cc488ecdb01}" /> 
-  <Execution ProcessID="664" ThreadID="8748" /> 
-  <Channel>Security</Channel> 
-  <Computer>WS01.ajrc.local</Computer> 
-  <Security /> 
-  </System>
-- <EventData>
-  <Data Name="SubjectUserSid">S-1-5-18</Data> 
-  <Data Name="SubjectUserName">WS01$</Data> 
-  <Data Name="SubjectDomainName">AJRC</Data> 
-  <Data Name="SubjectLogonId">0x3e7</Data> 
-  <Data Name="LogonGuid">{00000000-0000-0000-0000-000000000000}</Data> 
-  <Data Name="TargetUserName">sebastian.gomez</Data> 
-  <Data Name="TargetDomainName">AJRC</Data> 
-  <Data Name="TargetLogonGuid">{00000000-0000-0000-0000-000000000000}</Data> 
-  <Data Name="TargetServerName">localhost</Data> 
-  <Data Name="TargetInfo">localhost</Data> 
-  <Data Name="ProcessId">0x504</Data> 
-  <Data Name="ProcessName">C:\Windows\System32\svchost.exe</Data> 
-  <Data Name="IpAddress">192.168.68.123</Data> 
-  <Data Name="IpPort">0</Data> 
-  </EventData>
-  </Event>
-
-<!-- Sysmon 1 - Process creation -->
-<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
-    <System>
-        <Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}" /> 
-        <EventID>1</EventID> 
-        <Version>5</Version> 
-        <Level>4</Level> 
-        <Task>1</Task> 
-        <Opcode>0</Opcode> 
-        <Keywords>0x8000000000000000</Keywords> 
-        <TimeCreated SystemTime="2025-07-05T17:31:19.8346497Z" /> 
-        <EventRecordID>4776</EventRecordID> 
-        <Correlation /> 
-        <Execution ProcessID="3068" ThreadID="3772" /> 
-        <Channel>Microsoft-Windows-Sysmon/Operational</Channel> 
-        <Computer>WS01.ajrc.local</Computer> 
-        <Security UserID="S-1-5-18" /> 
-    </System>
+    <System> ... </System>
     <EventData>
-        <Data Name="RuleName">-</Data> 
-        <Data Name="UtcTime">2025-07-05 17:31:19.832</Data> 
-        <Data Name="ProcessGuid">{3b1ba004-6167-6869-f209-000000000700}</Data> 
-        <Data Name="ProcessId">6260</Data> 
-        <Data Name="Image">C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe</Data> 
-        <Data Name="FileVersion">138.0.3351.65</Data> 
-        <Data Name="Description">Microsoft Edge</Data> 
-        <Data Name="Product">Microsoft Edge</Data> 
-        <Data Name="Company">Microsoft Corporation</Data> 
-        <Data Name="OriginalFileName">msedge.exe</Data> 
-        <Data Name="CommandLine">"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --single-argument http://192.168.68.123/</Data> 
-        <Data Name="CurrentDirectory">C:\Windows\system32\</Data> 
-        <Data Name="User">AJRC\sebastian.gomez</Data> 
-        <Data Name="LogonGuid">{3b1ba004-5a7b-6869-face-cd0100000000}</Data> 
-        <Data Name="LogonId">0x1cdcefa</Data> 
-        <Data Name="TerminalSessionId">3</Data> 
-        <Data Name="IntegrityLevel">Medium</Data> 
-        <Data Name="Hashes">MD5=2994B91BCADC7E826691F765031E17AB,SHA256=DA03BA411259AD83F8313B842ED8F16F7F99CB0CEEE8AF729D9D9FB2E31320F7,IMPHASH=23FF41140CBD1050F401744A4BF949D3</Data> 
-        <Data Name="ParentProcessGuid">{3b1ba004-5a7e-6869-8308-000000000700}</Data> 
-        <Data Name="ParentProcessId">9844</Data> 
-        <Data Name="ParentImage">C:\Windows\explorer.exe</Data> 
-        <Data Name="ParentCommandLine">C:\Windows\Explorer.EXE</Data> 
-        <Data Name="ParentUser">AJRC\sebastian.gomez</Data> 
+        <Data Name="RuleName">RDP</Data> 
+        <Data Name="UtcTime">2025-07-05 18:56:16.044</Data> 
+        <Data Name="ProcessGuid">{3b1ba004-3804-6867-1300-000000000700}</Data> 
+        <Data Name="ProcessId">64</Data> 
+        <Data Name="Image">C:\Windows\System32\svchost.exe</Data> 
+        <Data Name="User">NT AUTHORITY\NETWORK SERVICE</Data> 
+        <Data Name="Protocol">tcp</Data> 
+        <Data Name="Initiated">false</Data> 
+        <Data Name="SourceIsIpv6">false</Data> 
+        <Data Name="SourceIp">192.168.68.123</Data> 
+        <Data Name="SourceHostname">-</Data> 
+        <Data Name="SourcePort">58900</Data> 
+        <Data Name="SourcePortName">-</Data> 
+        <Data Name="DestinationIsIpv6">false</Data> 
+        <Data Name="DestinationIp">192.168.68.21</Data> 
+        <Data Name="DestinationHostname">WS01.ajrc.local</Data> 
+        <Data Name="DestinationPort">3389</Data> 
+        <Data Name="DestinationPortName">ms-wbt-server</Data> 
     </EventData>
 </Event>
 
-<!-- Sysmon 3 - Network Connection -->
+<!-- 4624: Successful Logon -->
 <Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
- <System>
-  <Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}" /> 
-  <EventID>3</EventID> 
-  <Version>5</Version> 
-  <Level>4</Level> 
-  <Task>3</Task> 
-  <Opcode>0</Opcode> 
-  <Keywords>0x8000000000000000</Keywords> 
-  <TimeCreated SystemTime="2025-07-05T18:56:18.1016786Z" /> 
-  <EventRecordID>5476</EventRecordID> 
-  <Correlation /> 
-  <Execution ProcessID="3068" ThreadID="3700" /> 
-  <Channel>Microsoft-Windows-Sysmon/Operational</Channel> 
-  <Computer>WS01.ajrc.local</Computer> 
-  <Security UserID="S-1-5-18" /> 
-  </System>
- <EventData>
-  <Data Name="RuleName">RDP</Data> 
-  <Data Name="UtcTime">2025-07-05 18:56:16.044</Data> 
-  <Data Name="ProcessGuid">{3b1ba004-3804-6867-1300-000000000700}</Data> 
-  <Data Name="ProcessId">64</Data> 
-  <Data Name="Image">C:\Windows\System32\svchost.exe</Data> 
-  <Data Name="User">NT AUTHORITY\NETWORK SERVICE</Data> 
-  <Data Name="Protocol">tcp</Data> 
-  <Data Name="Initiated">false</Data> 
-  <Data Name="SourceIsIpv6">false</Data> 
-  <Data Name="SourceIp">192.168.68.123</Data> 
-  <Data Name="SourceHostname">-</Data> 
-  <Data Name="SourcePort">58900</Data> 
-  <Data Name="SourcePortName">-</Data> 
-  <Data Name="DestinationIsIpv6">false</Data> 
-  <Data Name="DestinationIp">192.168.68.21</Data> 
-  <Data Name="DestinationHostname">WS01.ajrc.local</Data> 
-  <Data Name="DestinationPort">3389</Data> 
-  <Data Name="DestinationPortName">ms-wbt-server</Data> 
-  </EventData>
-  </Event>
+    <System> ... </System>
+    <EventData>
+        <Data Name="SubjectUserSid">S-1-5-18</Data> 
+        <Data Name="SubjectUserName">WS01$</Data> 
+        <Data Name="SubjectDomainName">AJRC</Data> 
+        <Data Name="SubjectLogonId">0x3e7</Data> 
+        <Data Name="LogonGuid">{00000000-0000-0000-0000-000000000000}</Data> 
+        <Data Name="TargetUserName">sebastian.gomez</Data> 
+        <Data Name="TargetDomainName">AJRC</Data> 
+        <Data Name="TargetLogonGuid">{00000000-0000-0000-0000-000000000000}</Data> 
+        <Data Name="TargetServerName">localhost</Data> 
+        <Data Name="TargetInfo">localhost</Data> 
+        <Data Name="ProcessId">0x504</Data> 
+        <Data Name="ProcessName">C:\Windows\System32\svchost.exe</Data> 
+        <Data Name="IpAddress">192.168.68.123</Data> 
+        <Data Name="IpPort">0</Data> 
+    </EventData>
+</Event>
 ```
 
+#### Exploiting LLMNR Poisoning
 
-The following YARA-L rule detects unusual logon attempts (likely course of action) after a theoretical LLMNR Poisoning attack:
+This section demonstrates how an attacker can exploit LLMNR poisoning to capture NTLM credentials for offline cracking.
 
-```YARA-L
-rule ajrc_llmnrPoisoningDetectionImproved {
-  meta:
-    author = "Alejandro Javier Rodríguez Cantón"
-    description = "Detect potential LLMNR poisoning, SMB relay activity by correlating unusual connections with network logons"
-    severity = "High"
+---
 
-  events:
-    // This rule is namespace/domain/facility specific. Adapt if necesary.
-    $e_conn.principal.namespace = "ajrc.local"
-    $e_logon.principal.namespace = "ajrc.local"
+An attacker can leverage **Responder**, a popular tool from the Impacket suite, to perform LLMNR (and NBNS) spoofing and capture NTLM hashes.
 
-    // Suspicious connection initiated from outside trusted network
-    $e_conn.metadata.event_type = "NETWORK_DNS"
-    $e_conn.metadata.vendor_name = "Microsoft"
-    $e_conn.principal.user.userid = $user
-    $e_conn.principal.asset.hostname = $hostname
+Run Responder on the attacking machine with the following command:
 
-    not $user = /system/ nocase                     // Avoid false positives from system DNS queries to 'Untrusted Domains'
-    not $e_conn.network.dns.questions.name in regex %AjrcLocal_trustedHostsAndDomains   // Searched suspicious domain/hostname
-
-    // Logon attempt from the same IP after suspicious connection
-    $e_logon.metadata.event_type = "USER_LOGIN"
-    $e_logon.metadata.vendor_name = "Microsoft"
-    $e_logon.target.user.userid = $user             
-    $e_logon.target.asset.hostname = $hostname
-
-    // Logon from untrusted network.
-    // - Insider attacks won't be detected. You could instead create another regex list
-    //   of allowed IP addresses for remote connections.
-    not $e_logon.src.ip in cidr %AjrcLocal_trustedNetworks  
-
-    // Sequencing
-    $e_conn.metadata.event_timestamp.seconds <= $e_logon.metadata.event_timestamp.seconds
-
-  match:
-    $user, $hostname over 15m
-
-  outcome:
-    $risk_score = 120
-
-  condition:
-    $e_conn and $e_logon
-}
-```
-
-- The YARA-L rule does not consider Network Firewall logs.
-- The YARA-L rule requires a CIDR list `trustedNetworks`.
-
-#### Red Team: Perform LLMNR Poisoning
-
-- Use the attacker rool **Responder** from Impacket's toolkit
-
-Run:
+- `-I` specifies the network interface (e.g., `eth0` or `ens33`).
+- `-w` enables WPAD proxy authentication capture.
+- `-F` forces NTLM authentication for WPAD.
+- `-v` runs Responder in verbose mode for detailed output.
 
 ```bash
-responder -I {net-if} -wF -v    # Responder 3.1.6.0
+responder -I {net-if} -wF -v
 ```
 
-Then, the victim tries to access a remote resource (E.g. Windows Share), but the reference he use to access it points to the attacker's machine (DNS spoofing + LLMNR Poisoning)
+**This example uses Responder version 3.1.6.0.**
 
-Finally, responder captures the traffic and prints to the console the victim's NTLM Hash, which can be cracked offline.
+![d](/media/gso_demo_llmnrpoisonresponder.png)
+
+Once responder is listening, the victim must attempt to access to a network resource, such as connecting to a Windows share, using a reference that triggers name resolution. If this reference is either:
+
+- A non-existent hostname (e.g., `\\Files`), or
+- An explicit IP address linked to the attacker (via spoofing or poisoning at the link-layer)
+
+then Responder will respond to the LLMNR/NBNS requests, prompting the victim to send NTLM authentication information.
+
+Responder displays the captured NTLM hashes in its console output. These can then be cracked offline using hashcat:
 
 ```bash
-hashcat -m 5600 {file-to-crack} {wordlist} -O
+hashcat -m 5600 {capture-file} {wordlist} -O [--force]
 ```
 
-- The wordlist `rockyou.txt` is under the `/usr/share/wordlist/` directory in Kali Linux by default.
-- You can use any other wordlist besides Rockyou. `SecList` GitHub repo contains various useful wordlists.
-- `hashcat` won't work in a virtual machine. You need to run it in the physical computer.
+- `-m 5600` specifies the NetNTLMv2 hash mode.
+- `{capture-file}` is the file containing the extracted hashes.
+- `{wordlist}` is your chosen wordlist for the attack (e.g., `rockyou.txt`).
+- `-O` enables optimized kernel execution.
+- Optional `--force` might be required if you are using a VM.
 
-### SMB Relay
+![](/media/gso_demo_llmnrpoisonhashcat.png)
 
-#### Blue Team: Detect SMB Relay Attack
+You may use any comprehensive wordlist. The [SecLists](https://github.com/danielmiessler/SecLists) GitHub repository provides a wide range of curated wordlists suitable for password attacks. Moreoever, be aware that hashcat relies on hardware acceleration (GPU). As such, it will generally not run effectively inside a virtual machine and should be executed directly on a physical host equipped with a compatible GPU.
 
 
-#### Red Team: Peform SMB Relay Attack
-
-- Disable Responder SMB and HTTP responders in `/usr/share/responder.conf`.
-- Run `responder -I {net-if} -rdw -v` to stard Responder.
-- Run `ntlmrelayx -tf {target-file} -smb2support`
-- Victim tries to access an unexistent resource (or poisoned resource) that points to the attacker's machine.
