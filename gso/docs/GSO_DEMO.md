@@ -462,12 +462,14 @@ responder -I {net-if} -wF -v
 
 **This example uses Responder version 3.1.6.0.**
 
-![d](/media/gso_demo_llmnrpoisonresponder.png)
+![Running Responder from the Impacket Suite](/media/gso_demo_llmnrpoisonresponder.png)
 
 Once responder is listening, the victim must attempt to access to a network resource, such as connecting to a Windows share, using a reference that triggers name resolution. If this reference is either:
 
 - A non-existent hostname (e.g., `\\Files`), or
-- An explicit IP address linked to the attacker (via spoofing or poisoning at the link-layer)
+- An explicit IP address linked to the attacker (usually via spoofing or poisoning at the link-layer)
+
+![Victim trying to access a malicious remote resource](/media/gso_demo_llmnrclienttricked.png)
 
 then Responder will respond to the LLMNR/NBNS requests, prompting the victim to send NTLM authentication information.
 
@@ -483,8 +485,124 @@ hashcat -m 5600 {capture-file} {wordlist} -O [--force]
 - `-O` enables optimized kernel execution.
 - Optional `--force` might be required if you are using a VM.
 
-![](/media/gso_demo_llmnrpoisonhashcat.png)
+![Cracking a NTLMv2 password with Hashcat](/media/gso_demo_llmnrpoisonhashcat.png)
 
 You may use any comprehensive wordlist. The [SecLists](https://github.com/danielmiessler/SecLists) GitHub repository provides a wide range of curated wordlists suitable for password attacks. Moreoever, be aware that hashcat relies on hardware acceleration (GPU). As such, it will generally not run effectively inside a virtual machine and should be executed directly on a physical host equipped with a compatible GPU.
 
+### SMB Relay
+
+#### Blue Team: Detect SMB Relay Attack
+
+
+```XML
+<!-- 
+    In contrast to the previous attack example with LLMNR Poisoning, since we deactivated the 
+    responders SMB and HTTP, Sysmon events 3 and 22 do not generate. There is no DNS or LLMNR server
+    answering the queries.
+    The only way to detect potential openess to SMB Relay attack is through netowrk or host firewall logs.
+-->
+
+<!-- 4624: Successful Logon
+    - LogonType: Value 3 represents authentication over the network
+    - TargetUserName: Affected user account. This user account is likely a local administrator.
+    - LmPackageName or AuthenticationPackageName: Must contain NTLM
+    - WorkstationName: The computer's name that (should have) connected from the network
+    - IpAddress: The computer's IP address that (should have) connected from the network. 
+    
+    Notice that if the IP address does not correspond to the workstation, this is a big red flag. You'll need an asset inventory table/list for this analysis.
+-->
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+    <System> ... </System>
+    <EventData>
+        <Data Name="SubjectUserSid">S-1-0-0</Data> 
+        <Data Name="SubjectUserName">-</Data> 
+        <Data Name="SubjectDomainName">-</Data> 
+        <Data Name="SubjectLogonId">0x0</Data> 
+        <Data Name="TargetUserSid">S-1-5-21-4242100987-1054838966-2613292805-1104</Data> 
+        <Data Name="TargetUserName">sebastian.gomez</Data> 
+        <Data Name="TargetDomainName">AJRC</Data> 
+        <Data Name="TargetLogonId">0x50d06a3</Data> 
+        <Data Name="LogonType">3</Data> 
+        <Data Name="LogonProcessName">NtLmSsp</Data> 
+        <Data Name="AuthenticationPackageName">NTLM</Data> 
+        <Data Name="WorkstationName">WEC01</Data> 
+        <Data Name="LogonGuid">{00000000-0000-0000-0000-000000000000}</Data> 
+        <Data Name="TransmittedServices">-</Data> 
+        <Data Name="LmPackageName">NTLM V2</Data> 
+        <Data Name="KeyLength">128</Data> 
+        <Data Name="ProcessId">0x0</Data> 
+        <Data Name="ProcessName">-</Data> 
+        <Data Name="IpAddress">192.168.68.123</Data> 
+        <Data Name="IpPort">54446</Data> 
+        <Data Name="ImpersonationLevel">%%1833</Data> 
+        <Data Name="RestrictedAdminMode">-</Data> 
+        <Data Name="TargetOutboundUserName">-</Data> 
+        <Data Name="TargetOutboundDomainName">-</Data> 
+        <Data Name="VirtualAccount">%%1843</Data> 
+        <Data Name="TargetLinkedLogonId">0x0</Data> 
+        <Data Name="ElevatedToken">%%1842</Data> 
+    </EventData>
+</Event>
+
+<!-- 
+    Events 4672 will be generated after 4624. 
+    There's nothing special about them except that they must appear for the affected <TargetUserName>
+-->
+
+<!-- 
+    Event 5140: Access to shared objects over the network 
+    For this event to appear, you must have File Share auditing policy enabled.
+    Inspect the <IpAddress> from which a shared resource was read. if the IP address
+    is not known or suspicious, alert.
+    -->
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+    <System> ... </System>
+    <EventData>
+        <Data Name="SubjectUserSid">S-1-5-21-4242100987-1054838966-2613292805-1104</Data> 
+        <Data Name="SubjectUserName">sebastian.gomez</Data> 
+        <Data Name="SubjectDomainName">AJRC</Data> 
+        <Data Name="SubjectLogonId">0x50d01b0</Data> 
+        <Data Name="ObjectType">File</Data> 
+        <Data Name="IpAddress">192.168.68.123</Data> 
+        <Data Name="IpPort">60032</Data> 
+        <Data Name="ShareName">\\*\C$</Data> 
+        <Data Name="ShareLocalPath">\??\C:\</Data> 
+        <Data Name="AccessMask">0x1</Data> 
+        <Data Name="AccessList">%%4416</Data> 
+    </EventData>
+</Event>
+
+<!-- 
+    Monitor for Sysmon Event 1 (process creation) and 11 (file create) for any
+    post exploitation activity. You can correlate via LogonUID field.
+
+    11:40 - 11:44
+-->
+```
+
+#### Red Team: Peform SMB Relay Attack
+
+Adversary set up:
+
+1. Turn off SMB and HTTP Responders `gedit /usr/share/responder/Responder.conf`
+2. Identify if the target has SMB signign enabled
+    - `nmap --script=smb2-security-mode.nse -p445 {target}`: The host must have a message similar to `Message signing is enabled but not required`.
+
+![](/media/gso_demo_smbrelaysmbsignenum.png)
+
+Victim action:
+
+1. The victim must have Network discovery enabled.
+2. The victim must attempts to access a shared resource using a reference that triggers unsuccessful DNS name resolution.
+
+Adversary enumeration:
+
+2. Run responder `responder -I eth0 -wF -v` (HTTP and SMB servers must appear 'OFF')
+3. Run NTLMRelayx `netlmrelayx -tf {file_targets} -smb2support [-i]`
+    - The `{file_targets}` is a text file that lists the computers to which the captured NTLM hashes are going to be forwarded.
+    - The `-i` flag will allow you to start an interactive shell with the remote computer using `nc` (netcat).
+
+![](/media/gso_demo_smbrelaysetupntlmrelayx.png)
+
+![](/media/gso_demo_smbrelayattacksuccess.png)
 
